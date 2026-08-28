@@ -33,10 +33,11 @@ def play(detections: list[Detection]) -> Round | None:
 
     Returns None while there aren't two hands on screen.
     """
-    if len(detections) < 2:
+    playable = [d for d in detections if d.label in BEATS]
+    if len(playable) < 2:
         return None
 
-    hands = sorted(detections, key=lambda d: d.conf, reverse=True)[:2]
+    hands = sorted(playable, key=lambda d: d.conf, reverse=True)[:2]
     left, right = sorted(hands, key=lambda d: d.cx)
 
     left_result, right_result = judge(left.label, right.label)

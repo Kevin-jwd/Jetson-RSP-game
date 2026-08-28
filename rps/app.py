@@ -80,15 +80,15 @@ class Game:
             round_ = play(detections)
 
             self.screen.fill(BG)
-            self._draw_view(frame, round_)
-            self._draw_panel(round_)
+            self._draw_view(frame, detections, round_)
+            self._draw_panel(round_, len(detections))
             pygame.display.flip()
             self.clock.tick(60)
 
         self.cap.release()
         pygame.quit()
 
-    def _draw_view(self, frame: np.ndarray, round_) -> None:
+    def _draw_view(self, frame: np.ndarray, detections, round_) -> None:
         sx = self.view[0] / frame.shape[1]
         sy = self.view[1] / frame.shape[0]
 
@@ -96,13 +96,17 @@ class Game:
         surface = pygame.surfarray.make_surface(rgb.swapaxes(0, 1))
         self.screen.blit(pygame.transform.smoothscale(surface, self.view), (0, 0))
 
-        if round_ is None:
-            return
+        # Draw every detection, not just the two that made a round: an unmatched
+        # box is the difference between "no hand seen" and "only one hand seen".
+        players = {} if round_ is None else {
+            id(round_.left): round_.left_result, id(round_.right): round_.right_result,
+        }
 
-        for det, result in ((round_.left, round_.left_result), (round_.right, round_.right_result)):
+        for det in detections:
             x1, y1, x2, y2 = det.box
             rect = pygame.Rect(x1 * sx, y1 * sy, (x2 - x1) * sx, (y2 - y1) * sy)
-            color = RESULT_COLORS[result]
+            result = players.get(id(det))
+            color = RESULT_COLORS[result] if result else MUTED
             pygame.draw.rect(self.screen, color, rect, width=3, border_radius=6)
 
             caption = self.f_small.render(f"{det.label} {det.conf:.2f}", True, BG)
@@ -111,16 +115,17 @@ class Game:
             pygame.draw.rect(self.screen, color, tag, border_radius=4)
             self.screen.blit(caption, (tag.left + 6, tag.top + 3))
 
-    def _draw_panel(self, round_) -> None:
+    def _draw_panel(self, round_, found: int) -> None:
         top = self.view[1]
         pygame.draw.rect(self.screen, PANEL, (0, top, self.view[0], PANEL_H))
 
         if round_ is None:
+            message = "show two hands" if found == 0 else f"{found} hand detected"
             _blit_centered(
-                self.screen, "show two hands", self.f_label, MUTED,
+                self.screen, message, self.f_label, MUTED,
                 (self.view[0] // 2, top + PANEL_H // 2 - 12),
             )
-            self._draw_hint(top)
+            self._draw_hint(top, found)
             return
 
         pygame.draw.line(
@@ -137,8 +142,8 @@ class Game:
             _blit_centered(self.screen, det.label.upper(), self.f_label, TEXT, (cx, top + 64))
             _blit_centered(self.screen, result, self.f_result, RESULT_COLORS[result], (cx, top + 112))
 
-        self._draw_hint(top)
+        self._draw_hint(top, found)
 
-    def _draw_hint(self, top: int) -> None:
-        hint = f"{self.clock.get_fps():4.1f} fps   [m] mirror   [q] quit"
+    def _draw_hint(self, top: int, found: int) -> None:
+        hint = f"{self.clock.get_fps():4.1f} fps   {found} det   [m] mirror   [q] quit"
         self.screen.blit(self.f_small.render(hint, True, MUTED), (14, top + PANEL_H - 26))

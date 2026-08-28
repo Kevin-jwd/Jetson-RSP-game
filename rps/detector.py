@@ -55,8 +55,9 @@ class Detector:
         confs = boxes.conf.cpu().numpy()
         classes = boxes.cls.cpu().numpy().astype(int)
 
+        # Unknown ids are kept and labelled with the raw id: dropping them would
+        # look exactly like "nothing detected" if the engine's order ever changes.
         return [
-            Detection(CLASS_NAMES[c], float(p), tuple(b))
+            Detection(CLASS_NAMES.get(c, str(c)), float(p), tuple(b))
             for b, p, c in zip(xyxy, confs, classes)
-            if c in CLASS_NAMES
         ]
