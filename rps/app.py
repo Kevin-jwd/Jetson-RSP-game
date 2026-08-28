@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pygame
 
-from .detector import OnnxDetector
+from .detector import create_detector
 from .logic import DRAW, LOSE, WIN, play
 
 VIEW_W = 640
@@ -32,7 +32,7 @@ def _blit_centered(surface, text, font, color, center) -> None:
 
 class Game:
     def __init__(self, model_path: str, camera: int = 0, conf: float = 0.35, mirror: bool = True):
-        self.detector = OnnxDetector(model_path, conf_thres=conf)
+        self.detector = create_detector(model_path, conf_thres=conf)
         self.mirror = mirror
 
         self.cap = cv2.VideoCapture(camera)

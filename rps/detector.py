@@ -1,18 +1,21 @@
 """Hand detection backends.
 
 The rest of the game only ever calls ``Detector.detect(frame) -> list[Detection]``.
-That keeps the ONNX backend used on the PC swappable for a TensorRT one on the
-Jetson without touching the game logic or the UI.
+``create_detector()`` picks the backend from the file extension: ``.onnx`` runs on
+onnxruntime (PC), ``.engine`` on TensorRT (Jetson). The game logic and the UI are
+the same either way.
 """
 
 from __future__ import annotations
 
 import ast
+import json
+import struct
 from dataclasses import dataclass
+from pathlib import Path
 
 import cv2
 import numpy as np
-import onnxruntime as ort
 
 
 @dataclass(frozen=True)
@@ -62,29 +65,25 @@ def _nms(boxes: np.ndarray, scores: np.ndarray, iou_thres: float) -> list[int]:
     return keep
 
 
-class OnnxDetector:
-    """YOLO11 detector running on onnxruntime."""
+class _YoloDetector:
+    """Shared letterbox / decode / NMS. Backends only supply ``_infer``."""
 
-    def __init__(self, model_path: str, conf_thres: float = 0.35, iou_thres: float = 0.45):
-        self.session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
-        self.conf_thres = conf_thres
-        self.iou_thres = iou_thres
+    conf_thres: float
+    iou_thres: float
+    size: int
+    names: list[str]
 
-        spec = self.session.get_inputs()[0]
-        self.input_name = spec.name
-        self.size = spec.shape[2]
-
-        # Read class names off the model instead of hardcoding them: this model
-        # is ordered {0: scissors, 1: rock, 2: paper}, which is easy to get wrong.
-        meta = self.session.get_modelmeta().custom_metadata_map
-        names = ast.literal_eval(meta["names"])
-        self.names = [names[i] for i in range(len(names))]
+    def _infer(self, blob: np.ndarray) -> np.ndarray:
+        """Run the network on a (1, 3, size, size) blob -> (1, 4 + nc, anchors)."""
+        raise NotImplementedError
 
     def detect(self, frame: np.ndarray) -> list[Detection]:
         canvas, r, pad_x, pad_y = _letterbox(frame, self.size)
-        blob = canvas[:, :, ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
+        blob = np.ascontiguousarray(
+            canvas[:, :, ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
+        )
 
-        out = self.session.run(None, {self.input_name: blob})[0][0].T  # (anchors, 4 + nc)
+        out = self._infer(blob)[0].T  # (anchors, 4 + nc)
 
         scores = out[:, 4:]
         conf = scores.max(axis=1)
@@ -107,3 +106,105 @@ class OnnxDetector:
             Detection(self.names[cls[i]], float(conf[i]), tuple(boxes[i].astype(int)))
             for i in _nms(boxes, conf, self.iou_thres)
         ]
+
+
+class OnnxDetector(_YoloDetector):
+    """YOLO11 detector running on onnxruntime."""
+
+    def __init__(self, model_path: str, conf_thres: float = 0.35, iou_thres: float = 0.45):
+        import onnxruntime as ort
+
+        self.session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+        self.conf_thres = conf_thres
+        self.iou_thres = iou_thres
+
+        spec = self.session.get_inputs()[0]
+        self.input_name = spec.name
+        self.size = spec.shape[2]
+
+        # Read class names off the model instead of hardcoding them: this model
+        # is ordered {0: scissors, 1: rock, 2: paper}, which is easy to get wrong.
+        meta = self.session.get_modelmeta().custom_metadata_map
+        names = ast.literal_eval(meta["names"])
+        self.names = [names[i] for i in range(len(names))]
+
+    def _infer(self, blob: np.ndarray) -> np.ndarray:
+        return self.session.run(None, {self.input_name: blob})[0]
+
+
+def _split_engine(path: str) -> tuple[bytes, dict]:
+    """Split an ultralytics-exported .engine into (serialized engine, metadata).
+
+    Ultralytics prefixes the engine with a 4-byte little-endian length and a JSON
+    header holding ``imgsz`` and ``names``. A plain trtexec engine has no header,
+    so fall back to the whole file and no metadata.
+    """
+    raw = Path(path).read_bytes()
+    if len(raw) > 4:
+        n = struct.unpack("<I", raw[:4])[0]
+        if 0 < n < len(raw) - 4:
+            try:
+                return raw[4 + n:], json.loads(raw[4:4 + n].decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                pass
+    return raw, {}
+
+
+class TrtDetector(_YoloDetector):
+    """YOLO11 detector running on a TensorRT engine.
+
+    An engine is tied to the GPU and the TensorRT version it was built with, so it
+    has to be produced on the Jetson itself.
+    """
+
+    def __init__(self, model_path: str, conf_thres: float = 0.35, iou_thres: float = 0.45):
+        import tensorrt as trt
+
+        from .cuda import CudaMemory
+
+        self.conf_thres = conf_thres
+        self.iou_thres = iou_thres
+
+        serialized, meta = _split_engine(model_path)
+        self.engine = trt.Runtime(trt.Logger(trt.Logger.ERROR)).deserialize_cuda_engine(serialized)
+        if self.engine is None:
+            raise RuntimeError(f"could not load engine {model_path}; rebuild it on this board")
+        self.context = self.engine.create_execution_context()
+
+        names = [self.engine.get_tensor_name(i) for i in range(self.engine.num_io_tensors)]
+        modes = [self.engine.get_tensor_mode(n) for n in names]
+        self.in_name = next(n for n, m in zip(names, modes) if m == trt.TensorIOMode.INPUT)
+        self.out_name = next(n for n, m in zip(names, modes) if m == trt.TensorIOMode.OUTPUT)
+
+        in_shape = tuple(self.context.get_tensor_shape(self.in_name))
+        out_shape = tuple(self.context.get_tensor_shape(self.out_name))
+        self.size = in_shape[2]
+
+        class_names = meta.get("names")
+        if class_names:
+            class_names = {int(k): v for k, v in class_names.items()}
+            self.names = [class_names[i] for i in range(len(class_names))]
+        else:
+            # A trtexec engine carries no class list; fall back to this model's order.
+            self.names = ["scissors", "rock", "paper"][: out_shape[1] - 4]
+
+        self.mem = CudaMemory()
+        self.out = np.empty(out_shape, dtype=np.float32)
+        self.d_in = self.mem.alloc(int(np.prod(in_shape)) * 4)
+        self.d_out = self.mem.alloc(self.out.nbytes)
+        self.context.set_tensor_address(self.in_name, self.d_in)
+        self.context.set_tensor_address(self.out_name, self.d_out)
+
+    def _infer(self, blob: np.ndarray) -> np.ndarray:
+        self.mem.htod(self.d_in, blob)
+        self.context.execute_async_v3(self.mem.stream)
+        self.mem.dtoh(self.out, self.d_out)
+        self.mem.sync()
+        return self.out
+
+
+def create_detector(model_path: str, conf_thres: float = 0.35, iou_thres: float = 0.45):
+    """Pick the backend from the model file extension."""
+    if Path(model_path).suffix.lower() in (".engine", ".plan", ".trt"):
+        return TrtDetector(model_path, conf_thres, iou_thres)
+    return OnnxDetector(model_path, conf_thres, iou_thres)
