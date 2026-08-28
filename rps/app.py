@@ -22,20 +22,23 @@ import pygame
 from .detector import Detector
 from .logic import BEATS, DRAW, LOSE, WIN, Round, judge
 from .particles import RAINBOW, Particles
+from .space import Starfield, glow_text, vignette
 
 VIEW_W = 640
 PANEL_H = 190
 
-BG = (18, 18, 22)
-PANEL = (28, 28, 34)
-DIVIDER = (55, 55, 64)
-TEXT = (235, 235, 240)
-MUTED = (130, 130, 145)
-ACCENT = (90, 160, 240)
-BUTTON = (44, 44, 54)
-BUTTON_HOVER = (60, 60, 74)
+# Deep space: near-black with a blue cast, neon accents.
+BG = (6, 8, 20)
+PANEL = (11, 14, 32)
+DIVIDER = (44, 52, 96)
+TEXT = (226, 232, 255)
+MUTED = (118, 128, 172)
+ACCENT = (110, 200, 255)
+BUTTON = (22, 26, 56)
+BUTTON_HOVER = (38, 46, 88)
+GLOW = (70, 140, 255)
 
-RESULT_COLORS = {WIN: (90, 220, 140), LOSE: (240, 95, 95), DRAW: (225, 200, 90)}
+RESULT_COLORS = {WIN: (90, 240, 190), LOSE: (255, 90, 150), DRAW: (255, 205, 100)}
 
 # Round timing, in milliseconds.
 BEAT_MS = 1000         # one chant beat: 가위 / 바위 / 보!
@@ -65,9 +68,13 @@ class Button:
 
     def draw(self, screen, font, mouse) -> None:
         hover = self.rect.collidepoint(mouse)
-        pygame.draw.rect(screen, BUTTON_HOVER if hover else BUTTON, self.rect, border_radius=8)
-        pygame.draw.rect(screen, DIVIDER, self.rect, width=1, border_radius=8)
-        _blit_centered(screen, self.label, font, TEXT, self.rect.center)
+        pygame.draw.rect(screen, BUTTON_HOVER if hover else BUTTON, self.rect, border_radius=10)
+        pygame.draw.rect(screen, ACCENT if hover else DIVIDER, self.rect,
+                         width=2 if hover else 1, border_radius=10)
+        if hover:
+            glow_text(screen, self.label, font, TEXT, self.rect.center, ACCENT, 2)
+        else:
+            _blit_centered(screen, self.label, font, TEXT, self.rect.center)
 
     def hit(self, pos) -> bool:
         return self.rect.collidepoint(pos)
@@ -115,7 +122,7 @@ class Game:
         self.txt_solo = "1인용" if self.hangul else "1 PLAYER"
         self.txt_duo = "2인용" if self.hangul else "2 PLAYERS"
 
-        cx, by = self.view[0] // 2, self.view[1] + 100
+        cx, by = self.view[0] // 2, self.view[1] + 106
         self.btn_ai = Button(pygame.Rect(cx - 210, by, 190, 46), self.txt_solo)
         self.btn_person = Button(pygame.Rect(cx + 20, by, 190, 46), self.txt_duo)
         self.btn_retry = Button(pygame.Rect(cx - 210, by, 190, 46), self.txt_retry)
@@ -123,6 +130,8 @@ class Game:
         self.btn_stop = Button(pygame.Rect(self.view[0] - 146, by, 130, 46), self.txt_quit)
 
         self.images = self._load_images()
+        self.stars = Starfield((self.view[0], self.view[1] + PANEL_H), count=110)
+        self.vignette = vignette(self.view)
 
         self.state = MENU
         self.mode = PERSON
@@ -330,9 +339,12 @@ class Game:
             # not keep the GPU busy.
             detections = self.detector.detect(frame) if self.state in (COUNTDOWN, SHOOT) else []
             self._advance(detections, frame, now)
-            self.particles.update(self.clock.get_time() / 1000.0)
+            dt = self.clock.get_time() / 1000.0
+            self.particles.update(dt)
+            self.stars.update(dt)
 
             self.screen.fill(BG)
+            self.stars.draw(self.screen)
             if self.state == RESULT and self.shot is not None:
                 self._draw_view(self.shot, self.shot_dets, verdict=True)
             else:
@@ -363,6 +375,7 @@ class Game:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         surface = pygame.surfarray.make_surface(rgb.swapaxes(0, 1))
         self.screen.blit(pygame.transform.smoothscale(surface, self.view), (0, 0))
+        self.screen.blit(self.vignette, (0, 0))
 
         # Draw every detection, not only the ones that made a verdict: an
         # unmatched box is the difference between "no hand" and "one hand".
@@ -420,41 +433,47 @@ class Game:
 
     def _draw_title(self) -> None:
         shade = pygame.Surface(self.view, pygame.SRCALPHA)
-        shade.fill((0, 0, 0, 120))
+        shade.fill((4, 6, 18, 170))
         self.screen.blit(shade, (0, 0))
-        _blit_centered(self.screen, self.txt_title, self.f_title, TEXT,
-                       (self.view[0] // 2, self.view[1] // 2))
+        # Stars again over the dimmed video, so the title floats in space.
+        self.stars.draw(self.screen)
+        glow_text(self.screen, self.txt_title, self.f_title, TEXT,
+                  (self.view[0] // 2, self.view[1] // 2), GLOW, 4)
 
     def _draw_chant(self) -> None:
         """The chant sits over the video so players watch the camera, not the panel."""
         beat = min((pygame.time.get_ticks() - self.since) // BEAT_MS, len(self.chant) - 1)
+        center = (self.view[0] // 2, self.view[1] // 2)
         img = self.f_big.render(self.chant[beat], True, TEXT)
-        rect = img.get_rect(center=(self.view[0] // 2, self.view[1] // 2))
-        shade = pygame.Surface((rect.width + 48, rect.height + 24), pygame.SRCALPHA)
-        shade.fill((0, 0, 0, 150))
+        rect = img.get_rect(center=center)
+        shade = pygame.Surface((rect.width + 56, rect.height + 28), pygame.SRCALPHA)
+        shade.fill((4, 6, 18, 165))
         self.screen.blit(shade, shade.get_rect(center=rect.center))
-        self.screen.blit(img, rect)
+        glow_text(self.screen, self.chant[beat], self.f_big, TEXT, center, ACCENT, 4)
 
     def _draw_panel(self, now: int, found: int) -> None:
         top = self.view[1]
-        pygame.draw.rect(self.screen, PANEL, (0, top, self.view[0], PANEL_H))
+        plate = pygame.Surface((self.view[0], PANEL_H), pygame.SRCALPHA)
+        plate.fill((*PANEL, 232))
+        self.screen.blit(plate, (0, top))
+        pygame.draw.line(self.screen, ACCENT, (0, top), (self.view[0], top))
         mid = self.view[0] // 2
 
         if self.state == RESULT:
             sides = self._result_sides()
             if sides is None:
                 _blit_centered(self.screen, self.txt_nohands, self.f_label,
-                               RESULT_COLORS[LOSE], (mid, top + 46))
+                               RESULT_COLORS[LOSE], (mid, top + 44))
                 if self.mode == AI and self.ai_move is not None:
                     _blit_centered(self.screen, f"AI: {self.ai_move.upper()}", self.f_small,
                                    MUTED, (mid, top + 84))
             else:
-                pygame.draw.line(self.screen, DIVIDER, (mid, top + 10), (mid, top + 88))
+                pygame.draw.line(self.screen, DIVIDER, (mid, top + 8), (mid, top + 84))
                 for cx, name, move, result in sides:
-                    _blit_centered(self.screen, name, self.f_small, MUTED, (cx, top + 16))
-                    _blit_centered(self.screen, move.upper(), self.f_label, TEXT, (cx, top + 44))
-                    _blit_centered(self.screen, result, self.f_result,
-                                   RESULT_COLORS[result], (cx, top + 82))
+                    _blit_centered(self.screen, name, self.f_small, MUTED, (cx, top + 12))
+                    _blit_centered(self.screen, move.upper(), self.f_label, TEXT, (cx, top + 38))
+                    glow_text(self.screen, result, self.f_result,
+                              RESULT_COLORS[result], (cx, top + 74), RESULT_COLORS[result], 3)
         elif self.state == COUNTDOWN:
             beat = min((now - self.since) // BEAT_MS, len(self.chant) - 1)
             _blit_centered(self.screen, self.chant[beat], self.f_label, ACCENT, (mid, top + 46))
