@@ -34,7 +34,7 @@ English when no Hangul font is installed.
 | `rps/logic.py` | win/lose/draw rules |
 | `rps/app.py` | round state machine (menu → countdown → shoot → result), buttons, rendering |
 | `rps/particles.py` | particle burst over the winning hand |
-| `rps/retro.py` | arcade dressing: pixel text, scanlines, blinking prompts |
+| `rps/retro.py` | arcade dressing: pixel text, scanlines, perspective, wrap outlines |
 | `assets/` | `rock/paper/scissors` images for the AI's hand (optional) |
 | `tools/probe.py` | headless check of what the engine returns |
 | `tools/cuda_check.py` | CUDA and TensorRT environment check |

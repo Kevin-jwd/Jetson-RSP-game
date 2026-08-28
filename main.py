@@ -1,4 +1,4 @@
-"""Two-player rock-paper-scissors on a webcam."""
+"""Rock-paper-scissors on a webcam: one hand against the machine, or two hands."""
 
 import argparse
 
