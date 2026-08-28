@@ -28,8 +28,8 @@ def main() -> None:
     args = parser.parse_args()
 
     det = Detector(args.model, conf_thres=args.conf)
-    print(f"input  {det.in_name}: {tuple(det.context.get_tensor_shape(det.in_name))}")
-    print(f"output {det.out_name}: {det.out.shape}")
+    print(f"input  {det.in_name}: {tuple(det.context.get_tensor_shape(det.in_name))} {det.in_dtype}")
+    print(f"output {det.out_name}: {det.out.shape} {det.out_dtype}")
     print(f"names: {det.names}")
 
     cap = cv2.VideoCapture(args.camera)

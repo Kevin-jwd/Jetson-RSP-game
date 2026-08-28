@@ -111,9 +111,21 @@ class Detector:
         self.in_name = next(n for n, m in zip(io, modes) if m == trt.TensorIOMode.INPUT)
         self.out_name = next(n for n, m in zip(io, modes) if m == trt.TensorIOMode.OUTPUT)
 
-        in_shape = tuple(self.context.get_tensor_shape(self.in_name))
+        # A dynamic engine reports -1 for the free dimensions; pin them to the
+        # profile's optimum (batch 1) before anything is sized off the shape.
+        in_shape = list(self.engine.get_tensor_shape(self.in_name))
+        if any(d < 0 for d in in_shape):
+            opt = list(self.engine.get_tensor_profile_shape(self.in_name, 0)[1])
+            in_shape = [o if d < 0 else d for d, o in zip(in_shape, opt)]
+            self.context.set_input_shape(self.in_name, tuple(in_shape))
+        in_shape = tuple(in_shape)
         out_shape = tuple(self.context.get_tensor_shape(self.out_name))
         self.size = in_shape[2]
+
+        # Feeding float32 into an FP16 engine is what a "Cask convolution
+        # execution" failure usually is, so take both dtypes from the engine.
+        self.in_dtype = np.dtype(trt.nptype(self.engine.get_tensor_dtype(self.in_name)))
+        self.out_dtype = np.dtype(trt.nptype(self.engine.get_tensor_dtype(self.out_name)))
 
         names = meta.get("names")
         if names:
@@ -123,15 +135,18 @@ class Detector:
         self.names = names
 
         self.mem = CudaMemory()
-        self.out = np.empty(out_shape, dtype=np.float32)
-        self.d_in = self.mem.alloc(int(np.prod(in_shape)) * 4)
+        self.out = np.empty(out_shape, dtype=self.out_dtype)
+        self.d_in = self.mem.alloc(int(np.prod(in_shape)) * self.in_dtype.itemsize)
         self.d_out = self.mem.alloc(self.out.nbytes)
         self.context.set_tensor_address(self.in_name, self.d_in)
         self.context.set_tensor_address(self.out_name, self.d_out)
 
     def _infer(self, blob: np.ndarray) -> np.ndarray:
         self.mem.htod(self.d_in, blob)
-        self.context.execute_async_v3(self.mem.stream)
+        # Without this check a failed enqueue just leaves the previous output in
+        # place, which looks like the model quietly detecting nothing.
+        if not self.context.execute_async_v3(self.mem.stream):
+            raise RuntimeError("TensorRT enqueue failed; see the [TRT] [E] line above")
         self.mem.dtoh(self.out, self.d_out)
         self.mem.sync()
         return self.out
@@ -140,9 +155,9 @@ class Detector:
         canvas, r, pad_x, pad_y = _letterbox(frame, self.size)
         blob = np.ascontiguousarray(
             canvas[:, :, ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
-        )
+        ).astype(self.in_dtype, copy=False)
 
-        out = self._infer(blob)[0].T  # (anchors, 4 + nc)
+        out = self._infer(blob).astype(np.float32)[0].T  # (anchors, 4 + nc)
 
         scores = out[:, 4:]
         conf = scores.max(axis=1)
