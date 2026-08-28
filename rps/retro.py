@@ -112,3 +112,18 @@ def blink(now: int, period: int = 700) -> bool:
 def draw_frame(surface, rect, color, width: int = 3) -> None:
     """A hard-edged border, the way a cabinet bezel frames the screen."""
     pygame.draw.rect(surface, color, rect, width=width)
+
+
+def draw_trapezoid(surface, rect, top: float, color, width: int = 3) -> None:
+    """A band that follows a tilted surface: narrower at the top by ``top``.
+
+    Used to wrap text that has been through ``perspective`` — a plain rectangle
+    around it would sit at odds with the tilt.
+    """
+    cx = rect.centerx
+    half_bottom = rect.width / 2
+    half_top = half_bottom * top
+    pygame.draw.polygon(surface, color, [
+        (cx - half_top, rect.top), (cx + half_top, rect.top),
+        (cx + half_bottom, rect.bottom), (cx - half_bottom, rect.bottom),
+    ], width)

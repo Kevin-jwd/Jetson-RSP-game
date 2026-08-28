@@ -23,7 +23,8 @@ from .detector import Detector
 from .logic import BEATS, DRAW, LOSE, WIN, Round, judge
 from .particles import RAINBOW, Particles
 from .retro import (AMBER, CYAN, GREEN, MAGENTA, NEON_MINT, NEON_PINK, Scanlines,
-                    blink, draw_frame, perspective, pixel_surface, pixel_text)
+                    blink, draw_frame, draw_trapezoid, perspective, pixel_surface,
+                    pixel_text)
 
 # One knob for the whole cabinet: every size below is expressed at 1x and
 # scaled here, so the window can grow without the layout drifting apart.
@@ -477,22 +478,25 @@ class Game:
         # Tilted away from the viewer like an opening crawl, then framed.
         # A gentle tilt: enough to read as a crawl, not so much that the Hangul
         # collapses into stripes.
+        tilt = 0.72
         title = perspective(
             pixel_surface(self.txt_title, self.f_title, AMBER, S(7), SHADOW, BG),
-            top=0.72, squash=0.74,
+            top=tilt, squash=0.74,
         )
         trect = title.get_rect(center=(cx, self.view[1] // 2 - S(46)))
         self.screen.blit(title, trect)
 
-        # Two neon bands wrapping the whole word, not each glyph: the title
-        # reads as one sign that way, which is what a cabinet marquee is.
-        inner = trect.inflate(S(30), S(20))
-        outer = inner.inflate(S(18), S(18))
-        draw_frame(self.screen, outer, NEON_PINK, S(4))
-        draw_frame(self.screen, inner, NEON_MINT, S(4))
-        for x in (outer.left, outer.right - S(16)):
-            for y in (outer.top, outer.bottom - S(5)):
-                self.screen.fill(CYAN, (x, y, S(16), S(5)))
+        # Two neon bands hugging the word itself, following the same tilt. The
+        # bounding rect is measured on the drawn pixels, not the surface, so the
+        # bands sit right against the glyphs.
+        ink = title.get_bounding_rect().move(trect.topleft)
+        inner = ink.inflate(S(22), S(14))
+        outer = inner.inflate(S(18), S(14))
+        # The bands' top edge is widened past the tilt so it clears the topmost
+        # glyph row instead of cutting through it.
+        band_tilt = tilt + 0.08
+        draw_trapezoid(self.screen, outer, band_tilt, NEON_PINK, S(4))
+        draw_trapezoid(self.screen, inner, band_tilt, NEON_MINT, S(4))
 
         sub = pixel_surface("ROCK PAPER SCISSORS", self.f_prompt, MAGENTA, S(2), None, BG)
         self.screen.blit(sub, sub.get_rect(center=(cx, outer.bottom + S(26))))
