@@ -12,6 +12,7 @@ through the detector, since the game already knows what it picked.
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 from pathlib import Path
 
 import cv2
@@ -19,7 +20,7 @@ import numpy as np
 import pygame
 
 from .detector import Detector
-from .logic import BEATS, DRAW, LOSE, WIN, judge, play
+from .logic import BEATS, DRAW, LOSE, WIN, Round, judge
 from .particles import RAINBOW, Particles
 
 VIEW_W = 640
@@ -38,7 +39,8 @@ RESULT_COLORS = {WIN: (90, 220, 140), LOSE: (240, 95, 95), DRAW: (225, 200, 90)}
 
 # Round timing, in milliseconds.
 BEAT_MS = 700          # one chant beat: 가위 / 바위 / 보!
-SHOOT_MS = 1500        # how long to keep looking for hands after the beat
+VOTE_MS = 700          # how long to watch before judging
+SHOOT_MS = 1500        # give up if no hand is seen at all in this long
 
 MENU, COUNTDOWN, SHOOT, RESULT = "menu", "countdown", "shoot", "result"
 PERSON, AI = "person", "ai"
@@ -127,6 +129,8 @@ class Game:
         self.ai_move = None       # what the AI picked this round
         self.shot = None          # frame frozen at the moment of the verdict
         self.shot_dets: list = []
+        self.votes = None         # per hand: {label: (frames, summed conf)}
+        self.last_hands: list = []
         self.particles = Particles()
 
     def _ui_font(self, size: int, bold: bool = False) -> pygame.font.Font:
@@ -172,6 +176,8 @@ class Game:
         self.ai_move = random.choice(list(BEATS)) if mode == AI else None
         self.shot = None
         self.shot_dets = []
+        self.votes = None
+        self.last_hands = []
         self.particles.clear()
         self._enter(COUNTDOWN)
 
@@ -194,26 +200,63 @@ class Game:
             self._enter(SHOOT)
 
         elif self.state == SHOOT:
-            decided = self._judge_ai(detections) if self.mode == AI else self._judge_person(detections)
-            if decided or elapsed >= SHOOT_MS:
+            self._collect(detections)
+            if (elapsed >= VOTE_MS and self.votes) or elapsed >= SHOOT_MS:
                 self.shot = frame.copy()
                 self.shot_dets = detections
-                if decided:
+                if self._decide():
                     self._celebrate(frame.shape)
                 self._enter(RESULT)
 
-    def _judge_person(self, detections) -> bool:
-        self.round_ = play(detections)
-        return self.round_ is not None
+    def _collect(self, detections) -> None:
+        """Vote on each hand's move rather than trusting one frame.
 
-    def _judge_ai(self, detections) -> bool:
-        """One hand against a random move. The AI's pick never touches the detector."""
+        A hand opening from rock to paper passes through something the model
+        reads as scissors, and the first frame that parses is exactly when that
+        happens. Counting frames over VOTE_MS drops those in-between reads.
+        """
         hands = [d for d in detections if d.label in BEATS]
+        if self.mode == AI:
+            hands = hands[:1] if len(hands) == 1 else (
+                [max(hands, key=lambda d: d.conf)] if hands else [])
+        elif len(hands) >= 2:
+            hands = sorted(hands, key=lambda d: d.conf, reverse=True)[:2]
+            hands.sort(key=lambda d: d.cx)
+        else:
+            hands = []
         if not hands:
+            return
+
+        if self.votes is None:
+            self.votes = [{} for _ in hands]
+        if len(self.votes) != len(hands):
+            return
+
+        # Hands are ordered left to right, so slot 0 stays the same player even
+        # as the boxes move between frames.
+        for slot, det in zip(self.votes, hands):
+            frames, conf = slot.get(det.label, (0, 0.0))
+            slot[det.label] = (frames + 1, conf + det.conf)
+        self.last_hands = hands
+
+    def _decide(self) -> bool:
+        """Turn the votes into a verdict. Ties fall to the higher summed confidence."""
+        if not self.votes:
             return False
-        human = max(hands, key=lambda d: d.conf)
-        ai_result, human_result = judge(self.ai_move, human.label)
-        self.duel = (human, self.ai_move, human_result, ai_result)
+
+        labels = [max(slot.items(), key=lambda kv: kv[1])[0] for slot in self.votes]
+        hands = [replace(det, label=label) for det, label in zip(self.last_hands, labels)]
+        # Show the boxes that were voted on, with the labels the vote settled on.
+        self.shot_dets = hands
+
+        if self.mode == AI:
+            human = hands[0]
+            ai_result, human_result = judge(self.ai_move, human.label)
+            self.duel = (human, self.ai_move, human_result, ai_result)
+        else:
+            left, right = hands
+            left_result, right_result = judge(left.label, right.label)
+            self.round_ = Round(left, right, left_result, right_result)
         return True
 
     def _celebrate(self, shape) -> None:
@@ -409,7 +452,8 @@ class Game:
             beat = min((now - self.since) // BEAT_MS, len(self.chant) - 1)
             _blit_centered(self.screen, self.chant[beat], self.f_label, ACCENT, (mid, top + 46))
         elif self.state == SHOOT:
-            _blit_centered(self.screen, "...", self.f_label, ACCENT, (mid, top + 46))
+            voted = max((sum(f for f, _ in slot.values()) for slot in self.votes or []), default=0)
+            _blit_centered(self.screen, "." * (1 + voted % 3), self.f_label, ACCENT, (mid, top + 46))
 
         mouse = pygame.mouse.get_pos()
         for button in self._buttons():
