@@ -140,13 +140,18 @@ class Detector:
         self.d_out = self.mem.alloc(self.out.nbytes)
         self.context.set_tensor_address(self.in_name, self.d_in)
         self.context.set_tensor_address(self.out_name, self.d_out)
+        self.bindings = [self.d_in if n == self.in_name else self.d_out for n in io]
 
     def _infer(self, blob: np.ndarray) -> np.ndarray:
         self.mem.htod(self.d_in, blob)
         # Without this check a failed enqueue just leaves the previous output in
-        # place, which looks like the model quietly detecting nothing.
+        # place, which looks like the model quietly detecting nothing. Some builds
+        # only run through the older synchronous path, so fall back to it once.
         if not self.context.execute_async_v3(self.mem.stream):
-            raise RuntimeError("TensorRT enqueue failed; see the [TRT] [E] line above")
+            if not hasattr(self.context, "execute_v2"):
+                raise RuntimeError("TensorRT enqueue failed; see the [TRT] [E] line above")
+            if not self.context.execute_v2(self.bindings):
+                raise RuntimeError("TensorRT execution failed; see the [TRT] [E] line above")
         self.mem.dtoh(self.out, self.d_out)
         self.mem.sync()
         return self.out
