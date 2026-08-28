@@ -38,9 +38,10 @@ BUTTON_HOVER = (60, 60, 74)
 RESULT_COLORS = {WIN: (90, 220, 140), LOSE: (240, 95, 95), DRAW: (225, 200, 90)}
 
 # Round timing, in milliseconds.
-BEAT_MS = 700          # one chant beat: 가위 / 바위 / 보!
+BEAT_MS = 1000         # one chant beat: 가위 / 바위 / 보!
 VOTE_MS = 700          # how long to watch before judging
 SHOOT_MS = 1500        # give up if no hand is seen at all in this long
+RESULT_MS = 3000       # vs AI only: how long the verdict stays before the next round
 
 MENU, COUNTDOWN, SHOOT, RESULT = "menu", "countdown", "shoot", "result"
 PERSON, AI = "person", "ai"
@@ -190,7 +191,8 @@ class Game:
         if self.state == MENU:
             return [self.btn_ai, self.btn_person]
         if self.state == RESULT:
-            return [self.btn_retry, self.btn_quit]
+            # vs AI starts the next round on its own, so 재시도 would do nothing.
+            return [self.btn_stop] if self.mode == AI else [self.btn_retry, self.btn_quit]
         return [self.btn_stop]
 
     def _advance(self, detections, frame, now: int) -> None:
@@ -207,6 +209,9 @@ class Game:
                 if self._decide():
                     self._celebrate(frame.shape)
                 self._enter(RESULT)
+
+        elif self.state == RESULT and self.mode == AI and elapsed >= RESULT_MS:
+            self._start(AI)
 
     def _collect(self, detections) -> None:
         """Vote on each hand's move rather than trusting one frame.

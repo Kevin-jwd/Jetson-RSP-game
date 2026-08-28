@@ -17,10 +17,10 @@ import random
 
 import pygame
 
-GRAVITY = 420.0        # px/s^2, enough for a visible arc over one round
+GRAVITY = 300.0        # px/s^2, enough for a visible arc over one round
 DRAG = 0.86            # velocity kept per second
-LIFE = (0.6, 1.2)      # seconds
-SPEED = (90.0, 340.0)  # px/s
+LIFE = (2.0, 3.0)      # seconds
+SPEED = (75.0, 300.0)  # px/s
 RADIUS = (2, 5)
 
 # Vivid hues that stay readable against the camera image.
