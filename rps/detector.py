@@ -100,6 +100,11 @@ class Detector:
         self.conf_thres = conf_thres
         self.iou_thres = iou_thres
 
+        # Create the CUDA context *before* the engine. pycuda.autoinit makes its
+        # own context current, and an engine deserialized under a different one
+        # fails at kernel launch with "Cask (Cask convolution execution)".
+        self.mem = CudaMemory()
+
         serialized, meta = _split_engine(model_path)
         self.engine = trt.Runtime(trt.Logger(trt.Logger.ERROR)).deserialize_cuda_engine(serialized)
         if self.engine is None:
@@ -134,7 +139,6 @@ class Detector:
             names = CLASS_NAMES
         self.names = names
 
-        self.mem = CudaMemory()
         self.out = np.empty(out_shape, dtype=self.out_dtype)
         self.d_in = self.mem.alloc(int(np.prod(in_shape)) * self.in_dtype.itemsize)
         self.d_out = self.mem.alloc(self.out.nbytes)
