@@ -10,7 +10,7 @@ Nano. The title screen offers two modes:
 - **2인용** — two hands in the frame, judged left against right. One round, then
   재시도 or 종료.
 
-The game chants 가위-바위-보, watches for 0.7s and judges by majority vote, then
+The game chants 가위-바위-보, watches for 0.4s and judges by majority vote, then
 freezes that frame with the verdict. Only `q` closes the program.
 
 ## Run
@@ -47,7 +47,7 @@ English when no Hangul font is installed.
 
 A single frame is a bad witness. The chant ends while the hand is still moving,
 and a fist opening into paper passes through something the model reads as
-scissors. So the game collects labels over `VOTE_MS` (0.7s), one vote per frame
+scissors. So the game collects labels over `VOTE_MS` (0.4s), one vote per frame
 per hand, and takes the majority; ties go to the higher summed confidence. Hands
 are matched to players by box position, not by label.
 

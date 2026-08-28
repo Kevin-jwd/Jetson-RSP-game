@@ -28,7 +28,7 @@ from .retro import (AMBER, CYAN, GREEN, MAGENTA, NEON_MINT, NEON_PINK, Scanlines
 
 # One knob for the whole cabinet: every size below is expressed at 1x and
 # scaled here, so the window can grow without the layout drifting apart.
-UI = 1.5
+UI = 1.2
 
 
 def S(value: float) -> int:
@@ -52,8 +52,8 @@ SHADOW = (40, 24, 0)
 RESULT_COLORS = {WIN: GREEN, LOSE: MAGENTA, DRAW: AMBER}
 
 # Round timing, in milliseconds.
-BEAT_MS = 1000         # one chant beat: 가위 / 바위 / 보!
-VOTE_MS = 700          # how long to watch before judging
+BEAT_MS = 700          # one chant beat: 가위 / 바위 / 보!
+VOTE_MS = 400          # how long to watch before judging
 SHOOT_MS = 1500        # give up if no hand is seen at all in this long
 RESULT_MS = 3000       # vs AI only: how long the verdict stays before the next round
 OVER_MS = 3500         # how long GAME OVER stays up
