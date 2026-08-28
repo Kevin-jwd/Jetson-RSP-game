@@ -10,6 +10,7 @@ budget belongs to inference and to pushing video over the display link.
 
 from __future__ import annotations
 
+import numpy as np
 import pygame
 
 # Phosphor palette: near-black tube, saturated ink.
@@ -93,12 +94,20 @@ def perspective(image: pygame.Surface, top: float = 0.5, bands: int = 20,
 
 
 class Scanlines:
-    """A CRT's dark line between every scan row, pre-rendered once."""
+    """A CRT grid, pre-rendered once.
 
-    def __init__(self, size: tuple[int, int], gap: int = 3, alpha: int = 52):
+    Horizontal scan lines alone make the picture read as rows of pixels but not
+    columns, so an aperture grille goes in as well — fainter, because the real
+    thing is, and because two full-strength grids would eat the image.
+    """
+
+    def __init__(self, size: tuple[int, int], gap: int = 3, alpha: int = 52,
+                 vgap: int = 3, valpha: int = 30):
         self.surface = pygame.Surface(size, pygame.SRCALPHA)
         for y in range(0, size[1], gap):
             self.surface.fill((0, 0, 0, alpha), (0, y, size[0], 1))
+        for x in range(0, size[0], vgap):
+            self.surface.fill((0, 0, 0, valpha), (x, 0, 1, size[1]))
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.blit(self.surface, (0, 0))
@@ -112,6 +121,59 @@ def blink(now: int, period: int = 700) -> bool:
 def draw_frame(surface, rect, color, width: int = 3) -> None:
     """A hard-edged border, the way a cabinet bezel frames the screen."""
     pygame.draw.rect(surface, color, rect, width=width)
+
+
+def hug_outline(image: pygame.Surface, origin, pad: int, bands: int = 12):
+    """Points of a stepped outline that follows what is actually drawn.
+
+    A plain rectangle or trapezoid around tilted text sits at odds with the
+    glyphs. Walking the ink's left and right extent band by band gives a shape
+    that wraps the word instead, and the steps read as pixels rather than as a
+    smooth diagonal.
+    """
+    alpha = pygame.surfarray.array_alpha(image)      # (width, height)
+    w, h = image.get_size()
+    step = max(1, h // bands)
+    ox, oy = origin
+
+    left, right = [], []
+    for y0 in range(0, h, step):
+        y1 = min(h, y0 + step)
+        cols = np.nonzero(alpha[:, y0:y1].max(axis=1))[0]
+        if not len(cols):
+            continue
+        left.append((int(cols[0]) - pad, y0, y1))
+        right.append((int(cols[-1]) + pad, y0, y1))
+    if not left:
+        return []
+
+    # Take each band's extent out to its neighbours' as well. Without this the
+    # horizontal segment that steps from one band to the next can cut straight
+    # through the glyphs of the band it is stepping into.
+    def dilate(rows, pick):
+        out = []
+        for i, (x, y0, y1) in enumerate(rows):
+            near = [rows[j][0] for j in (i - 1, i, i + 1) if 0 <= j < len(rows)]
+            out.append((pick(near), y0, y1))
+        return out
+
+    left = dilate(left, min)
+    right = dilate(right, max)
+
+    points = [(ox + right[0][0], oy + right[0][1] - pad)]   # above the first row
+    for x, y0, y1 in right:                                 # down the right edge
+        points += [(ox + x, oy + y0), (ox + x, oy + y1)]
+    points.append((ox + right[-1][0], oy + right[-1][2] + pad))
+    points.append((ox + left[-1][0], oy + left[-1][2] + pad))
+    for x, y0, y1 in reversed(left):                        # back up the left edge
+        points += [(ox + x, oy + y1), (ox + x, oy + y0)]
+    points.append((ox + left[0][0], oy + left[0][1] - pad))
+    return points
+
+
+def draw_hug(surface, points, color, width: int = 3) -> None:
+    if len(points) >= 3:
+        pygame.draw.polygon(surface, color, points, width)
 
 
 def draw_trapezoid(surface, rect, top: float, color, width: int = 3) -> None:

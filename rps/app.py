@@ -23,8 +23,8 @@ from .detector import Detector
 from .logic import BEATS, DRAW, LOSE, WIN, Round, judge
 from .particles import RAINBOW, Particles
 from .retro import (AMBER, CYAN, GREEN, MAGENTA, NEON_MINT, NEON_PINK, Scanlines,
-                    blink, draw_frame, draw_trapezoid, perspective, pixel_surface,
-                    pixel_text)
+                    blink, draw_frame, draw_hug, hug_outline, perspective,
+                    pixel_surface, pixel_text)
 
 # One knob for the whole cabinet: every size below is expressed at 1x and
 # scaled here, so the window can grow without the layout drifting apart.
@@ -486,20 +486,13 @@ class Game:
         trect = title.get_rect(center=(cx, self.view[1] // 2 - S(46)))
         self.screen.blit(title, trect)
 
-        # Two neon bands hugging the word itself, following the same tilt. The
-        # bounding rect is measured on the drawn pixels, not the surface, so the
-        # bands sit right against the glyphs.
-        ink = title.get_bounding_rect().move(trect.topleft)
-        inner = ink.inflate(S(22), S(14))
-        outer = inner.inflate(S(18), S(14))
-        # The bands' top edge is widened past the tilt so it clears the topmost
-        # glyph row instead of cutting through it.
-        band_tilt = tilt + 0.08
-        draw_trapezoid(self.screen, outer, band_tilt, NEON_PINK, S(4))
-        draw_trapezoid(self.screen, inner, band_tilt, NEON_MINT, S(4))
+        # Two neon bands walking around the word itself, stepping with the ink
+        # rather than boxing it in.
+        draw_hug(self.screen, hug_outline(title, trect.topleft, S(24)), NEON_PINK, S(4))
+        draw_hug(self.screen, hug_outline(title, trect.topleft, S(12)), NEON_MINT, S(4))
 
         sub = pixel_surface("ROCK PAPER SCISSORS", self.f_prompt, MAGENTA, S(2), None, BG)
-        self.screen.blit(sub, sub.get_rect(center=(cx, outer.bottom + S(26))))
+        self.screen.blit(sub, sub.get_rect(center=(cx, trect.bottom + S(40))))
 
         now = pygame.time.get_ticks()
         if self.credits > 0:
