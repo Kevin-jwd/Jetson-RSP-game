@@ -24,6 +24,8 @@ Hangul font is installed.
 | `rps/detector.py` | YOLO11 inference on a TensorRT engine behind `detect(frame) -> [Detection]` |
 | `rps/cuda.py` | device memory and stream (cuda-python or pycuda) |
 | `tools/probe.py` | headless check of what the engine returns |
+| `tools/capture.py` | burst-capture and auto-label training frames from the camera |
+| `tools/augment_calib.py` | suggest augmentation values from the real camera |
 | `rps/logic.py` | left/right assignment and win/lose/draw rules |
 | `rps/app.py` | round state machine (idle → countdown → shoot → result), buttons, rendering |
 | `rps/particles.py` | particle burst over the winning hand |
