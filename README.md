@@ -1,8 +1,9 @@
 # Jetson RPS Game
 
-Two-player rock-paper-scissors over a webcam. Press 시작 and the game chants
-가위-바위-보, reads both hands on the beat, freezes that frame with the verdict,
-and starts the next round until 종료.
+Rock-paper-scissors over a webcam. The title screen offers `vs AI` (one hand
+against a random move, drawn over the left of the video) and `vs Person` (two
+hands in the frame). The game chants 가위-바위-보, reads the hands on the beat,
+freezes that frame with the verdict, and stops there: 재시도 or 종료.
 
 ## Run
 
@@ -12,8 +13,8 @@ python main.py
 ```
 
 Options: `--model`, `--camera`, `--conf`, `--classes`, `--no-mirror`.
-Keys: `space` start/stop, `m` mirror, `q` quit. The chant falls back to
-`GAWI/BAWI/BO!` when no Hangul font is installed.
+Keys: `r` retry, `m` mirror, `q` quit. Labels fall back to English when no
+Hangul font is installed.
 
 ## Layout
 
@@ -25,6 +26,7 @@ Keys: `space` start/stop, `m` mirror, `q` quit. The chant falls back to
 | `rps/logic.py` | left/right assignment and win/lose/draw rules |
 | `rps/app.py` | round state machine (idle → countdown → shoot → result), buttons, rendering |
 | `rps/particles.py` | particle burst over the winning hand |
+| `assets/` | `rock/paper/scissors` images for the AI's hand (optional) |
 | `models/rps_yolo11n.onnx` | trained detector, 320x320 — kept only as the source for building an engine |
 
 Class order is easy to get wrong and fails silently — rock read as paper looks like
