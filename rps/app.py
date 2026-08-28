@@ -9,7 +9,7 @@ import pygame
 from .detector import OnnxDetector
 from .logic import DRAW, LOSE, WIN, play
 
-VIEW_W = 800
+VIEW_W = 640
 PANEL_H = 170
 
 BG = (18, 18, 22)
@@ -35,9 +35,10 @@ class Game:
         self.detector = OnnxDetector(model_path, conf_thres=conf)
         self.mirror = mirror
 
-        self.cap = cv2.VideoCapture(camera, cv2.CAP_DSHOW)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        self.cap = cv2.VideoCapture(camera)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if not self.cap.isOpened():
             raise RuntimeError(f"could not open camera {camera}")
 
