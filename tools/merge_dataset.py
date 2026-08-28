@@ -112,7 +112,7 @@ def main() -> None:
     val = "val" if (out / "images/val").exists() else "test"
     yaml.write_text(
         f"train: images/train\nval: images/{val}\n"
-        + (f"test: images/test\n" if (out / "images/test").exists() else "")
+        + ("test: images/test\n" if (out / "images/test").exists() else "")
         + f"\nnc: {len(TARGET)}\nnames: {TARGET}\n",
         encoding="utf-8",
     )

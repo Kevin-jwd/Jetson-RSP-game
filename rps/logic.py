@@ -26,19 +26,3 @@ def judge(a: str, b: str) -> tuple[str, str]:
     if BEATS[a] == b:
         return WIN, LOSE
     return LOSE, WIN
-
-
-def play(detections: list[Detection]) -> Round | None:
-    """Pick the two most confident hands and judge them left vs right.
-
-    Returns None while there aren't two hands on screen.
-    """
-    playable = [d for d in detections if d.label in BEATS]
-    if len(playable) < 2:
-        return None
-
-    hands = sorted(playable, key=lambda d: d.conf, reverse=True)[:2]
-    left, right = sorted(hands, key=lambda d: d.cx)
-
-    left_result, right_result = judge(left.label, right.label)
-    return Round(left, right, left_result, right_result)
