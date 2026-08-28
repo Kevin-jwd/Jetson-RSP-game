@@ -36,6 +36,7 @@ English when no Hangul font is installed.
 | `rps/particles.py` | particle burst over the winning hand |
 | `rps/retro.py` | arcade dressing: pixel text, scanlines, perspective, wrap outlines |
 | `assets/` | `rock/paper/scissors` images for the AI's hand (optional) |
+| `test/preview.py` | live camera preview with boxes, confidences and fps |
 | `tools/probe.py` | headless check of what the engine returns |
 | `tools/cuda_check.py` | CUDA and TensorRT environment check |
 | `tools/merge_dataset.py` | merge YOLO datasets, remapping class ids by name |
@@ -60,6 +61,17 @@ as the camera saw it and once mirrored, and the more confident reading of each
 hand is kept. `--no-flip-tta` turns that off and halves the inference cost.
 
 The on-screen mirror is display only — it never reaches the model.
+
+## When inference runs
+
+Only during the beat that decides the round. The chant, the title screen and the
+frozen verdict decide nothing, so running the model there just costs frames.
+That means the game shows no boxes until the verdict — to check that hands sit
+in frame, run the preview instead:
+
+```bash
+python test/preview.py --model models/rps_yolo11s.engine
+```
 
 ## Class order
 

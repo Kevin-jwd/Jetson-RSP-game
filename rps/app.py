@@ -398,12 +398,16 @@ class Game:
             if not ok:
                 continue
 
+            # Inference runs in SHOOT and nowhere else. The chant, the menu and
+            # the frozen verdict all decide nothing, so paying for the GPU there
+            # only costs frames. Use test/preview.py to check framing.
+            detections = self.detector.detect(frame) if self.state == SHOOT else []
+
             # Detect on the camera's own image, then mirror for display. The
             # mirror exists so players see themselves the way they expect, and
             # feeding it to the model as well flips every hand's chirality --
             # measured on this engine, the flipped view scores lower. Whichever
             # way the bias runs, the model should see what the camera saw.
-            detections = self.detector.detect(frame) if self.state in (COUNTDOWN, SHOOT) else []
             if self.mirror:
                 detections = [_flip(d, frame.shape[1]) for d in detections]
                 frame = cv2.flip(frame, 1)
