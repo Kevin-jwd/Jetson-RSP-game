@@ -124,6 +124,7 @@ class Game:
         self.since = 0
         self.round_ = None        # two-hand verdict, vs Person
         self.duel = None          # (human, ai move, human result, ai result), vs AI
+        self.ai_move = None       # what the AI picked this round
         self.shot = None          # frame frozen at the moment of the verdict
         self.shot_dets: list = []
         self.particles = Particles()
@@ -166,6 +167,9 @@ class Game:
         self.mode = mode
         self.round_ = None
         self.duel = None
+        # Picked up front so the AI's hand can be shown even when the camera
+        # never got a good look at the player's.
+        self.ai_move = random.choice(list(BEATS)) if mode == AI else None
         self.shot = None
         self.shot_dets = []
         self.particles.clear()
@@ -203,9 +207,8 @@ class Game:
         if not hands:
             return False
         human = max(hands, key=lambda d: d.conf)
-        ai_move = random.choice(list(BEATS))
-        ai_result, human_result = judge(ai_move, human.label)
-        self.duel = (human, ai_move, human_result, ai_result)
+        ai_result, human_result = judge(self.ai_move, human.label)
+        self.duel = (human, self.ai_move, human_result, ai_result)
         return True
 
     def _celebrate(self, shape) -> None:
@@ -323,8 +326,8 @@ class Game:
             pygame.draw.rect(self.screen, color, tag, border_radius=4)
             self.screen.blit(caption, (tag.left + 6, tag.top + 3))
 
-        if verdict and self.mode == AI and self.duel is not None:
-            self._draw_ai_move(self.duel[1], self.duel[3])
+        if verdict and self.mode == AI and self.ai_move is not None:
+            self._draw_ai_move(self.ai_move, self.duel[3] if self.duel else None)
 
         # Clip to the video area so particles never spill onto the panel.
         self.screen.set_clip(pygame.Rect(0, 0, *self.view))
@@ -336,10 +339,14 @@ class Game:
         elif self.state == COUNTDOWN:
             self._draw_chant()
 
-    def _draw_ai_move(self, move: str, result: str) -> None:
-        """The AI's hand, overlaid on the left of the video."""
+    def _draw_ai_move(self, move: str, result: str | None) -> None:
+        """The AI's hand, overlaid on the left of the video.
+
+        ``result`` is None when the player's hand was never read: the AI still
+        played a move, so show it, just without a verdict colour.
+        """
         center = self._ai_center()
-        color = RESULT_COLORS[result]
+        color = RESULT_COLORS[result] if result else MUTED
         image = self.images.get(move)
 
         if image is not None:
@@ -384,6 +391,9 @@ class Game:
             if sides is None:
                 _blit_centered(self.screen, self.txt_nohands, self.f_label,
                                RESULT_COLORS[LOSE], (mid, top + 46))
+                if self.mode == AI and self.ai_move is not None:
+                    _blit_centered(self.screen, f"AI: {self.ai_move.upper()}", self.f_small,
+                                   MUTED, (mid, top + 84))
             else:
                 pygame.draw.line(self.screen, DIVIDER, (mid, top + 10), (mid, top + 88))
                 for cx, name, move, result in sides:
