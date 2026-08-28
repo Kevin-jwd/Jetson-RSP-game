@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pygame
 
-from .detector import create_detector
+from .detector import Detector
 from .logic import DRAW, LOSE, WIN, play
 
 VIEW_W = 640
@@ -31,13 +31,13 @@ def _blit_centered(surface, text, font, color, center) -> None:
 
 
 class Game:
-    def __init__(self, model_path: str, camera: int = 0, conf: float = 0.35, mirror: bool = True):
-        self.detector = create_detector(model_path, conf_thres=conf)
+    def __init__(self, model_path: str, camera: int = 0, conf: float = 0.5, mirror: bool = True):
+        self.detector = Detector(model_path, conf_thres=conf)
         self.mirror = mirror
 
         self.cap = cv2.VideoCapture(camera)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if not self.cap.isOpened():
             raise RuntimeError(f"could not open camera {camera}")

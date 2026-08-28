@@ -17,30 +17,27 @@ Options: `--model`, `--camera`, `--conf`, `--no-mirror`. Keys: `m` mirror, `q` q
 
 | Path | Role |
 | --- | --- |
-| `rps/detector.py` | YOLO11 inference behind `detect(frame) -> [Detection]`; onnxruntime and TensorRT backends |
-| `rps/cuda.py` | device memory for the TensorRT backend (cuda-python or pycuda) |
+| `rps/detector.py` | YOLO11 inference on a TensorRT engine behind `detect(frame) -> [Detection]` |
 | `rps/logic.py` | left/right assignment and win/lose/draw rules |
 | `rps/app.py` | pygame loop and rendering |
-| `models/rps_yolo11n.onnx` | trained detector, 320x320, classes `scissors, rock, paper` |
+| `models/rps_yolo11n.onnx` | trained detector, 320x320 — kept only as the source for building an engine |
 
-Class names are read from the ONNX metadata rather than hardcoded — this model
-is ordered `scissors, rock, paper`, which is easy to get wrong.
+The engine's own class list is unreliable, so ids are mapped in `CLASS_NAMES`:
+`{0: scissors, 1: rock, 2: paper}`, an order that is easy to get wrong.
 
 ## Jetson
 
-`--model` picks the backend by extension, so the same command runs either one:
+Inference runs on a TensorRT engine through ultralytics, which handles
+preprocessing and NMS. An engine is tied to the GPU and TensorRT version it was
+built with, so build it on the board:
+
+```bash
+yolo export model=models/rps_yolo11n.onnx format=engine half=True imgsz=320
+```
+
+Then point `--model` at it (or copy it to `models/rps_yolo11n_2.engine`, the
+default):
 
 ```bash
 python main.py --model /home/aidl/work/rps_yolo11n_2.engine
 ```
-
-An engine is tied to the GPU and TensorRT version it was built with, so build it
-on the board:
-
-```bash
-/usr/src/tensorrt/bin/trtexec --onnx=models/rps_yolo11n.onnx --fp16 --saveEngine=models/rps.engine
-```
-
-Engines exported by ultralytics carry their class names in a JSON header and are
-read back automatically. A `trtexec` engine has no such header, so the backend
-falls back to this model's order, `scissors, rock, paper`.
