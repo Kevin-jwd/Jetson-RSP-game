@@ -23,8 +23,8 @@ from .detector import Detector
 from .logic import BEATS, DRAW, LOSE, WIN, Round, judge
 from .particles import RAINBOW, Particles
 from .retro import (AMBER, CYAN, GREEN, MAGENTA, NEON_MINT, NEON_PINK, Scanlines,
-                    blink, draw_frame, draw_hug, hug_outline, perspective,
-                    pixel_surface, pixel_text)
+                    blink, draw_frame, draw_wrap, perspective, pixel_surface,
+                    pixel_text, wrap_outline)
 
 # One knob for the whole cabinet: every size below is expressed at 1x and
 # scaled here, so the window can grow without the layout drifting apart.
@@ -61,6 +61,9 @@ OVER_MS = 3500         # how long GAME OVER stays up
 START_CREDITS = 3      # 1인용 costs one credit a round, like a cabinet
 
 MENU, COUNTDOWN, SHOOT, RESULT, OVER = "menu", "countdown", "shoot", "result", "over"
+
+# How far the title's top edge recedes; 1.0 would be no tilt at all.
+TILT = 0.72
 PERSON, AI = "person", "ai"
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
@@ -152,6 +155,7 @@ class Game:
         self.btn_stop = Button(pygame.Rect(self.view[0] - S(146), by, S(130), bh), self.txt_quit)
 
         self.images = self._load_images()
+        self.title_art, self.title_wraps = self._build_title()
         self.scanlines = Scanlines((self.view[0], self.view[1] + PANEL_H))
         self.credits = START_CREDITS
 
@@ -194,6 +198,23 @@ class Game:
         if missing:
             print(f"no AI images for {missing} in {ASSETS}; drawing name cards instead")
         return images
+
+    def _build_title(self):
+        """The marquee never changes, so tilt it and trace its wrap once."""
+        def tilt(surface):
+            return perspective(surface, top=TILT, squash=0.74)
+
+        art = tilt(pixel_surface(self.txt_title, self.f_title, AMBER, S(7), SHADOW, BG))
+        # The wrap is traced from the letters alone. Tracing the drawn art would
+        # follow the drop shadow too, and the band would bulge away from the
+        # glyphs on one side. Both surfaces are the same size, so the outlines
+        # line up with the art when blitted.
+        silhouette = tilt(pixel_surface(self.txt_title, self.f_title, AMBER, S(7)))
+        # Bridged horizontally so the whole word is wrapped as one shape rather
+        # than each syllable separately.
+        wraps = [(wrap_outline(silhouette, S(5), bridge=S(14)), NEON_MINT),
+                 (wrap_outline(silhouette, S(12), bridge=S(18)), NEON_PINK)]
+        return art, wraps
 
     # --- round flow -------------------------------------------------------
 
@@ -476,23 +497,13 @@ class Game:
         self.screen.blit(shade, (0, 0))
 
         # Tilted away from the viewer like an opening crawl, then framed.
-        # A gentle tilt: enough to read as a crawl, not so much that the Hangul
-        # collapses into stripes.
-        tilt = 0.72
-        title = perspective(
-            pixel_surface(self.txt_title, self.f_title, AMBER, S(7), SHADOW, BG),
-            top=tilt, squash=0.74,
-        )
-        trect = title.get_rect(center=(cx, self.view[1] // 2 - S(46)))
-        self.screen.blit(title, trect)
-
-        # Two neon bands walking around the word itself, stepping with the ink
-        # rather than boxing it in.
-        draw_hug(self.screen, hug_outline(title, trect.topleft, S(24)), NEON_PINK, S(4))
-        draw_hug(self.screen, hug_outline(title, trect.topleft, S(12)), NEON_MINT, S(4))
+        trect = self.title_art.get_rect(center=(cx, self.view[1] // 2 - S(46)))
+        self.screen.blit(self.title_art, trect)
+        for points, color in reversed(self.title_wraps):
+            draw_wrap(self.screen, points, trect.topleft, color, S(3))
 
         sub = pixel_surface("ROCK PAPER SCISSORS", self.f_prompt, MAGENTA, S(2), None, BG)
-        self.screen.blit(sub, sub.get_rect(center=(cx, trect.bottom + S(40))))
+        self.screen.blit(sub, sub.get_rect(center=(cx, trect.bottom + S(34))))
 
         now = pygame.time.get_ticks()
         if self.credits > 0:

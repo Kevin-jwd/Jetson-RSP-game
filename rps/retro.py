@@ -10,6 +10,7 @@ budget belongs to inference and to pushing video over the display link.
 
 from __future__ import annotations
 
+import cv2
 import numpy as np
 import pygame
 
@@ -123,69 +124,33 @@ def draw_frame(surface, rect, color, width: int = 3) -> None:
     pygame.draw.rect(surface, color, rect, width=width)
 
 
-def hug_outline(image: pygame.Surface, origin, pad: int, bands: int = 12):
-    """Points of a stepped outline that follows what is actually drawn.
+def wrap_outline(image: pygame.Surface, pad: int, bridge: int = 0):
+    """Trace a band around what is drawn, the way cling film sits on food.
 
-    A plain rectangle or trapezoid around tilted text sits at odds with the
-    glyphs. Walking the ink's left and right extent band by band gives a shape
-    that wraps the word instead, and the steps read as pixels rather than as a
-    smooth diagonal.
+    The alpha mask is grown by ``pad`` and then its outer contour is traced, so
+    the line follows the word's own silhouette instead of boxing it in. ``bridge``
+    widens the growth horizontally only, which fuses neighbouring glyphs into one
+    blob — otherwise every letter would get its own separate band.
+
+    A rectangular structuring element keeps the result rectilinear, which is what
+    makes it read as pixels rather than as a smooth curve.
     """
-    alpha = pygame.surfarray.array_alpha(image)      # (width, height)
-    w, h = image.get_size()
-    step = max(1, h // bands)
-    ox, oy = origin
+    alpha = pygame.surfarray.array_alpha(image).T          # (height, width)
+    mask = (alpha > 0).astype(np.uint8)
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (pad * 2 + bridge * 2 + 1, pad * 2 + 1)
+    )
+    grown = cv2.dilate(mask, kernel)
 
-    left, right = [], []
-    for y0 in range(0, h, step):
-        y1 = min(h, y0 + step)
-        cols = np.nonzero(alpha[:, y0:y1].max(axis=1))[0]
-        if not len(cols):
-            continue
-        left.append((int(cols[0]) - pad, y0, y1))
-        right.append((int(cols[-1]) + pad, y0, y1))
-    if not left:
+    contours, _ = cv2.findContours(grown, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
         return []
-
-    # Take each band's extent out to its neighbours' as well. Without this the
-    # horizontal segment that steps from one band to the next can cut straight
-    # through the glyphs of the band it is stepping into.
-    def dilate(rows, pick):
-        out = []
-        for i, (x, y0, y1) in enumerate(rows):
-            near = [rows[j][0] for j in (i - 1, i, i + 1) if 0 <= j < len(rows)]
-            out.append((pick(near), y0, y1))
-        return out
-
-    left = dilate(left, min)
-    right = dilate(right, max)
-
-    points = [(ox + right[0][0], oy + right[0][1] - pad)]   # above the first row
-    for x, y0, y1 in right:                                 # down the right edge
-        points += [(ox + x, oy + y0), (ox + x, oy + y1)]
-    points.append((ox + right[-1][0], oy + right[-1][2] + pad))
-    points.append((ox + left[-1][0], oy + left[-1][2] + pad))
-    for x, y0, y1 in reversed(left):                        # back up the left edge
-        points += [(ox + x, oy + y1), (ox + x, oy + y0)]
-    points.append((ox + left[0][0], oy + left[0][1] - pad))
-    return points
+    biggest = max(contours, key=cv2.contourArea)
+    return [(int(x), int(y)) for x, y in biggest[:, 0, :]]
 
 
-def draw_hug(surface, points, color, width: int = 3) -> None:
+def draw_wrap(surface, points, origin, color, width: int = 3) -> None:
     if len(points) >= 3:
-        pygame.draw.polygon(surface, color, points, width)
-
-
-def draw_trapezoid(surface, rect, top: float, color, width: int = 3) -> None:
-    """A band that follows a tilted surface: narrower at the top by ``top``.
-
-    Used to wrap text that has been through ``perspective`` — a plain rectangle
-    around it would sit at odds with the tilt.
-    """
-    cx = rect.centerx
-    half_bottom = rect.width / 2
-    half_top = half_bottom * top
-    pygame.draw.polygon(surface, color, [
-        (cx - half_top, rect.top), (cx + half_top, rect.top),
-        (cx + half_bottom, rect.bottom), (cx - half_bottom, rect.bottom),
-    ], width)
+        ox, oy = origin
+        pygame.draw.lines(surface, color, True,
+                          [(ox + x, oy + y) for x, y in points], width)
