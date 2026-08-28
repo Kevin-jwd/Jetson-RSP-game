@@ -7,7 +7,7 @@ from rps.app import Game
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", default="models/rps_yolo11n_2.engine")
+    parser.add_argument("--model", default="models/rps_yolo11s.engine")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--conf", type=float, default=0.5)
     parser.add_argument("--no-mirror", action="store_true")

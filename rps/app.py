@@ -88,8 +88,8 @@ class Game:
         self.mirror = mirror
 
         self.cap = cv2.VideoCapture(camera)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if not self.cap.isOpened():
             raise RuntimeError(f"could not open camera {camera}")
@@ -189,13 +189,11 @@ class Game:
         self.credits = min(self.credits + 1, 9)
 
     def _start(self, mode: str) -> None:
-        # 1인용 runs on credits like a cabinet; 2인용 is free, since two people
-        # are already paying with their time.
-        if mode == AI:
-            if self.credits <= 0:
-                self._enter(OVER)
-                return
-            self.credits -= 1
+        # 1인용 runs on credits like a cabinet: a credit buys entry, and only a
+        # loss spends it. Winning or drawing keeps you on the machine.
+        if mode == AI and self.credits <= 0:
+            self._enter(OVER)
+            return
         self.mode = mode
         self.round_ = None
         self.duel = None
@@ -235,6 +233,8 @@ class Game:
                 self.shot_dets = detections
                 if self._decide():
                     self._celebrate(frame.shape)
+                    if self.mode == AI and self.duel[2] == LOSE:
+                        self.credits -= 1
                 self._enter(RESULT)
 
         elif self.state == RESULT and self.mode == AI and elapsed >= RESULT_MS:

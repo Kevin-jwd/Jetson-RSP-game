@@ -22,7 +22,7 @@ from rps.detector import Detector  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", default="models/rps_yolo11n_2.engine")
+    parser.add_argument("--model", default="models/rps_yolo11s.engine")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--conf", type=float, default=0.05)
     parser.add_argument("--frames", type=int, default=20)
@@ -37,8 +37,8 @@ def main() -> None:
     print(f"names: {det.names}")
 
     cap = cv2.VideoCapture(args.camera)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         raise SystemExit(f"could not open camera {args.camera}")

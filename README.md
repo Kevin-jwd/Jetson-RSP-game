@@ -4,7 +4,9 @@ Rock-paper-scissors over a webcam, running on a TensorRT engine on a Jetson Orin
 Nano. The title screen offers two modes:
 
 - **1인용** — one hand against a random move, drawn over the left of the video.
-  Rounds keep going until 종료.
+  Runs on credits like a cabinet: a credit buys entry and only a **loss** spends
+  one, so winning or drawing keeps you on the machine. `c` inserts a coin. At
+  zero credits the round ends in GAME OVER and the title screen asks for another.
 - **2인용** — two hands in the frame, judged left against right. One round, then
   재시도 or 종료.
 
@@ -15,11 +17,11 @@ freezes that frame with the verdict. Only `q` closes the program.
 
 ```bash
 pip install -r requirements.txt
-python main.py --model models/best.engine
+python main.py --model models/rps_yolo11s.engine
 ```
 
 Options: `--model`, `--camera`, `--conf`, `--classes`, `--no-mirror`.
-Keys: `r` retry, `m` mirror, `q` quit (the only way out). Labels fall back to
+Keys: `c` insert coin, `r` retry, `m` mirror, `q` quit (the only way out). Labels fall back to
 English when no Hangul font is installed.
 
 ## Layout
@@ -32,6 +34,7 @@ English when no Hangul font is installed.
 | `rps/logic.py` | win/lose/draw rules |
 | `rps/app.py` | round state machine (menu → countdown → shoot → result), buttons, rendering |
 | `rps/particles.py` | particle burst over the winning hand |
+| `rps/retro.py` | arcade dressing: pixel text, scanlines, blinking prompts |
 | `assets/` | `rock/paper/scissors` images for the AI's hand (optional) |
 | `tools/probe.py` | headless check of what the engine returns |
 | `tools/cuda_check.py` | CUDA and TensorRT environment check |
@@ -75,7 +78,7 @@ on the board. Give each build its own name; overwriting the engine you are
 currently playing with leaves nothing to fall back to:
 
 ```bash
-/usr/src/tensorrt/bin/trtexec --onnx=best.onnx --saveEngine=models/best.engine --fp16
+/usr/src/tensorrt/bin/trtexec --onnx=best.onnx --saveEngine=models/rps_yolo11s.engine --fp16
 ```
 
 When nothing is detected, check the engine before the game — `tools/probe.py`
@@ -83,7 +86,7 @@ prints its input/output shapes, its class names, and the raw scores at a very lo
 threshold, with no GUI:
 
 ```bash
-python tools/probe.py --model models/best.engine
+python tools/probe.py --model models/rps_yolo11s.engine
 ```
 
 `tools/cuda_check.py` prints the TensorRT and CUDA versions the process actually
