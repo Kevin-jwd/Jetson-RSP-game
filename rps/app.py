@@ -22,10 +22,20 @@ import pygame
 from .detector import Detector
 from .logic import BEATS, DRAW, LOSE, WIN, Round, judge
 from .particles import RAINBOW, Particles
-from .retro import AMBER, CYAN, GREEN, MAGENTA, Scanlines, blink, draw_frame, pixel_text
+from .retro import (AMBER, CYAN, GREEN, MAGENTA, NEON_MINT, NEON_PINK, Scanlines,
+                    blink, draw_frame, perspective, pixel_surface, pixel_text)
 
-VIEW_W = 640
-PANEL_H = 190
+# One knob for the whole cabinet: every size below is expressed at 1x and
+# scaled here, so the window can grow without the layout drifting apart.
+UI = 1.5
+
+
+def S(value: float) -> int:
+    return round(value * UI)
+
+
+VIEW_W = S(640)
+PANEL_H = S(190)
 
 # Arcade cabinet: black tube, saturated phosphor ink.
 BG = (8, 8, 12)
@@ -73,9 +83,9 @@ class Button:
         """Square corners and a hard border: a cabinet has no rounded rectangles."""
         hover = self.rect.collidepoint(mouse)
         screen.fill(BUTTON_HOVER if hover else BUTTON, self.rect)
-        draw_frame(screen, self.rect, ACCENT if hover else DIVIDER, 2)
+        draw_frame(screen, self.rect, ACCENT if hover else DIVIDER, S(2))
         pixel_text(screen, self.label, font, ACCENT if hover else TEXT,
-                   self.rect.center, 2, SHADOW)
+                   self.rect.center, S(2), SHADOW)
 
     def hit(self, pos) -> bool:
         return self.rect.collidepoint(pos)
@@ -110,13 +120,17 @@ class Game:
         self.hangul = pygame.font.match_font(KOREAN_FONTS) is not None
         # Small fonts, scaled up by pixel_text: that is where the blockiness
         # comes from, and it works for Hangul too.
-        self.f_small = pygame.font.SysFont(MONO_FONTS, 16)
+        # Deliberately tiny: every one of these is blown up by pixel_text, and a
+        # small glyph has no room for curves to survive the nearest-neighbour
+        # scale. Hangul stops being readable below about 11px, which sets the
+        # floor here.
+        self.f_small = pygame.font.SysFont(MONO_FONTS, S(16))
         self.f_button = self._ui_font(11, bold=True)
-        self.f_prompt = self._ui_font(12, bold=True)   # Hangul-capable, for prompts
-        self.f_label = self._ui_font(12, bold=True)
-        self.f_title = self._ui_font(15, bold=True)
-        self.f_big = self._ui_font(16, bold=True)
-        self.f_result = self._ui_font(14, bold=True)
+        self.f_prompt = self._ui_font(13, bold=True)   # Hangul-capable, for prompts
+        self.f_label = self._ui_font(11, bold=True)
+        self.f_title = self._ui_font(12, bold=True)
+        self.f_big = self._ui_font(12, bold=True)
+        self.f_result = self._ui_font(11, bold=True)
 
         self.txt_title = "가위 바위 보" if self.hangul else "ROCK PAPER SCISSORS"
         self.txt_retry = "재시도" if self.hangul else "RETRY"
@@ -128,12 +142,13 @@ class Game:
         self.txt_coin = "코인 투입 [C]" if self.hangul else "INSERT COIN [C]"
         self.txt_over = "게임 오버" if self.hangul else "GAME OVER"
 
-        cx, by = self.view[0] // 2, self.view[1] + 106
-        self.btn_ai = Button(pygame.Rect(cx - 210, by, 190, 46), self.txt_solo)
-        self.btn_person = Button(pygame.Rect(cx + 20, by, 190, 46), self.txt_duo)
-        self.btn_retry = Button(pygame.Rect(cx - 210, by, 190, 46), self.txt_retry)
-        self.btn_quit = Button(pygame.Rect(cx + 20, by, 190, 46), self.txt_quit)
-        self.btn_stop = Button(pygame.Rect(self.view[0] - 146, by, 130, 46), self.txt_quit)
+        cx, by = self.view[0] // 2, self.view[1] + S(106)
+        bw, bh = S(190), S(46)
+        self.btn_ai = Button(pygame.Rect(cx - S(210), by, bw, bh), self.txt_solo)
+        self.btn_person = Button(pygame.Rect(cx + S(20), by, bw, bh), self.txt_duo)
+        self.btn_retry = Button(pygame.Rect(cx - S(210), by, bw, bh), self.txt_retry)
+        self.btn_quit = Button(pygame.Rect(cx + S(20), by, bw, bh), self.txt_quit)
+        self.btn_stop = Button(pygame.Rect(self.view[0] - S(146), by, S(130), bh), self.txt_quit)
 
         self.images = self._load_images()
         self.scanlines = Scanlines((self.view[0], self.view[1] + PANEL_H))
@@ -403,13 +418,14 @@ class Game:
             rect = pygame.Rect(x1 * sx, y1 * sy, (x2 - x1) * sx, (y2 - y1) * sy)
             result = players.get(id(det))
             color = RESULT_COLORS[result] if result else MUTED
-            draw_frame(self.screen, rect, color, 2)
+            draw_frame(self.screen, rect, color, S(2))
 
             caption = self.f_small.render(f"{det.label} {det.conf:.2f}", True, BG)
-            tag_top = rect.top - 22 if rect.top >= 22 else rect.top
-            tag = pygame.Rect(rect.left, tag_top, caption.get_width() + 10, 22)
+            tag_h = caption.get_height() + S(4)
+            tag_top = rect.top - tag_h if rect.top >= tag_h else rect.top
+            tag = pygame.Rect(rect.left, tag_top, caption.get_width() + S(10), tag_h)
             self.screen.fill(color, tag)
-            self.screen.blit(caption, (tag.left + 5, tag.top + 2))
+            self.screen.blit(caption, (tag.left + S(5), tag.top + S(2)))
 
         if verdict and self.mode == AI and self.ai_move is not None:
             self._draw_ai_move(self.ai_move, self.duel[3] if self.duel else None)
@@ -438,7 +454,7 @@ class Game:
 
         if image is not None:
             rect = image.get_rect(center=center)
-            draw_frame(self.screen, rect.inflate(16, 16), color, 3)
+            draw_frame(self.screen, rect.inflate(S(16), S(16)), color, S(3))
             self.screen.blit(image, rect)
         else:
             rect = pygame.Rect(0, 0, round(self.view[0] * 0.36), round(self.view[1] * 0.45))
@@ -446,10 +462,10 @@ class Game:
             card = pygame.Surface(rect.size, pygame.SRCALPHA)
             card.fill((0, 0, 0, 190))
             self.screen.blit(card, rect)
-            draw_frame(self.screen, rect, color, 3)
-            pixel_text(self.screen, move.upper(), self.f_label, color, rect.center, 2, SHADOW)
+            draw_frame(self.screen, rect, color, S(3))
+            pixel_text(self.screen, move.upper(), self.f_label, color, rect.center, S(2), SHADOW, BG)
 
-        _blit_centered(self.screen, "AI", self.f_small, color, (center[0], rect.top - 14))
+        _blit_centered(self.screen, "AI", self.f_small, color, (center[0], rect.top - S(14)))
 
     def _draw_title(self) -> None:
         """An attract screen: dimmed video, big blocky title, blinking prompt."""
@@ -458,21 +474,39 @@ class Game:
         shade.fill((4, 4, 8, 190))
         self.screen.blit(shade, (0, 0))
 
-        pixel_text(self.screen, self.txt_title, self.f_title, AMBER,
-                   (cx, self.view[1] // 2 - 40), 4, SHADOW)
-        pixel_text(self.screen, "ROCK PAPER SCISSORS", self.f_small, MAGENTA,
-                   (cx, self.view[1] // 2 + 10), 1)
+        # Tilted away from the viewer like an opening crawl, then framed.
+        # A gentle tilt: enough to read as a crawl, not so much that the Hangul
+        # collapses into stripes.
+        title = perspective(
+            pixel_surface(self.txt_title, self.f_title, AMBER, S(7), SHADOW, BG),
+            top=0.72, squash=0.74,
+        )
+        trect = title.get_rect(center=(cx, self.view[1] // 2 - S(46)))
+        self.screen.blit(title, trect)
+
+        # Two neon bands wrapping the whole word, not each glyph: the title
+        # reads as one sign that way, which is what a cabinet marquee is.
+        inner = trect.inflate(S(30), S(20))
+        outer = inner.inflate(S(18), S(18))
+        draw_frame(self.screen, outer, NEON_PINK, S(4))
+        draw_frame(self.screen, inner, NEON_MINT, S(4))
+        for x in (outer.left, outer.right - S(16)):
+            for y in (outer.top, outer.bottom - S(5)):
+                self.screen.fill(CYAN, (x, y, S(16), S(5)))
+
+        sub = pixel_surface("ROCK PAPER SCISSORS", self.f_prompt, MAGENTA, S(2), None, BG)
+        self.screen.blit(sub, sub.get_rect(center=(cx, outer.bottom + S(26))))
 
         now = pygame.time.get_ticks()
         if self.credits > 0:
             if blink(now):
                 pixel_text(self.screen, "PRESS 1P OR 2P", self.f_prompt, CYAN,
-                           (cx, self.view[1] - 60), 2)
+                           (cx, self.view[1] - S(56)), S(2), None, BG)
         elif blink(now, 500):
             pixel_text(self.screen, self.txt_coin, self.f_prompt, MAGENTA,
-                       (cx, self.view[1] - 60), 2)
+                       (cx, self.view[1] - S(56)), S(2), None, BG)
 
-        draw_frame(self.screen, pygame.Rect(0, 0, *self.view), AMBER, 3)
+        draw_frame(self.screen, pygame.Rect(0, 0, *self.view), AMBER, S(3))
 
     def _draw_over(self) -> None:
         """Out of credits. The cabinet's own answer is to ask for another coin."""
@@ -481,67 +515,64 @@ class Game:
         shade.fill((4, 4, 8, 210))
         self.screen.blit(shade, (0, 0))
         pixel_text(self.screen, self.txt_over, self.f_title, MAGENTA,
-                   (cx, self.view[1] // 2 - 20), 4, SHADOW)
+                   (cx, self.view[1] // 2 - S(20)), S(5), SHADOW, BG)
         if blink(pygame.time.get_ticks(), 500):
             pixel_text(self.screen, self.txt_coin, self.f_prompt, AMBER,
-                       (cx, self.view[1] // 2 + 50), 2)
-        draw_frame(self.screen, pygame.Rect(0, 0, *self.view), MAGENTA, 3)
+                       (cx, self.view[1] // 2 + S(60)), S(2), None, BG)
+        draw_frame(self.screen, pygame.Rect(0, 0, *self.view), MAGENTA, S(3))
 
     def _draw_chant(self) -> None:
         """The chant sits over the video so players watch the camera, not the panel."""
         beat = min((pygame.time.get_ticks() - self.since) // BEAT_MS, len(self.chant) - 1)
         center = (self.view[0] // 2, self.view[1] // 2)
-        word = self.chant[beat]
-        rect = pixel_text(self.screen, word, self.f_big, AMBER, center, 4, SHADOW)
-        shade = pygame.Surface((rect.width + 40, rect.height + 20), pygame.SRCALPHA)
-        shade.fill((4, 4, 8, 170))
-        self.screen.blit(shade, shade.get_rect(center=center))
-        pixel_text(self.screen, word, self.f_big, AMBER, center, 4, SHADOW)
+        # No panel behind it: an outline keeps the word readable while leaving
+        # the players' hands visible underneath.
+        pixel_text(self.screen, self.chant[beat], self.f_big, AMBER, center, S(6), SHADOW, BG)
 
     def _draw_panel(self, now: int, found: int) -> None:
         top = self.view[1]
         self.screen.fill(PANEL, (0, top, self.view[0], PANEL_H))
-        self.screen.fill(AMBER, (0, top, self.view[0], 2))
+        self.screen.fill(AMBER, (0, top, self.view[0], S(2)))
         mid = self.view[0] // 2
 
         if self.state == RESULT:
             sides = self._result_sides()
             if sides is None:
                 pixel_text(self.screen, self.txt_nohands, self.f_label,
-                           RESULT_COLORS[LOSE], (mid, top + 40), 2, SHADOW)
+                           RESULT_COLORS[LOSE], (mid, top + S(40)), S(2), SHADOW)
                 if self.mode == AI and self.ai_move is not None:
                     _blit_centered(self.screen, f"AI: {self.ai_move.upper()}", self.f_small,
-                                   MUTED, (mid, top + 80))
+                                   MUTED, (mid, top + S(80)))
             else:
-                self.screen.fill(DIVIDER, (mid, top + 8, 1, 76))
+                self.screen.fill(DIVIDER, (mid, top + S(8), 1, S(76)))
                 for cx, name, move, result in sides:
-                    _blit_centered(self.screen, name, self.f_small, MUTED, (cx, top + 12))
+                    _blit_centered(self.screen, name, self.f_small, MUTED, (cx, top + S(12)))
                     pixel_text(self.screen, move.upper(), self.f_label, TEXT,
-                               (cx, top + 38), 2, SHADOW)
+                               (cx, top + S(38)), S(2), SHADOW)
                     pixel_text(self.screen, result, self.f_result, RESULT_COLORS[result],
-                               (cx, top + 74), 3, SHADOW)
+                               (cx, top + S(74)), S(3), SHADOW)
         elif self.state == COUNTDOWN:
             beat = min((now - self.since) // BEAT_MS, len(self.chant) - 1)
-            pixel_text(self.screen, self.chant[beat], self.f_label, AMBER, (mid, top + 44), 2, SHADOW)
+            pixel_text(self.screen, self.chant[beat], self.f_label, AMBER, (mid, top + S(44)), S(2), SHADOW)
         elif self.state == SHOOT:
             voted = max((sum(f for f, _ in slot.values()) for slot in self.votes or []), default=0)
             pixel_text(self.screen, "." * (1 + voted % 3), self.f_label, AMBER,
-                       (mid, top + 44), 2, SHADOW)
+                       (mid, top + S(44)), S(2), SHADOW)
 
         # Credit counter, top left of the panel where nothing else is drawn.
         # It blinks when empty, which is the cabinet asking for a coin.
         coin_color = AMBER if self.credits else MAGENTA
-        pixel_text(self.screen, "CREDIT", self.f_small, MUTED, (52, top + 16), 1)
+        pixel_text(self.screen, "CREDIT", self.f_small, MUTED, (S(52), top + S(16)), 1)
         if self.credits or blink(now, 500):
             pixel_text(self.screen, str(self.credits), self.f_small, coin_color,
-                       (52, top + 46), 2)
+                       (S(52), top + S(46)), S(2))
 
         mouse = pygame.mouse.get_pos()
         for button in self._buttons():
             button.draw(self.screen, self.f_button, mouse)
 
         hint = f"{self.clock.get_fps():4.1f} fps  {found} det  [c] coin  [r] retry  [m] mirror  [q] quit"
-        self.screen.blit(self.f_small.render(hint, True, MUTED), (14, top + PANEL_H - 18))
+        self.screen.blit(self.f_small.render(hint, True, MUTED), (S(14), top + PANEL_H - S(20)))
 
     def _result_sides(self):
         """(x, name, move, result) per side, or None when nothing was judged."""

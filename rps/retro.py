@@ -21,22 +21,75 @@ AMBER = (255, 200, 40)
 GREEN = (80, 255, 120)
 MAGENTA = (255, 60, 160)
 CYAN = (60, 220, 255)
+NEON_MINT = (80, 255, 200)
+NEON_PINK = (255, 70, 180)
+
+
+def pixel_surface(text, font, color, scale: int,
+                  shadow: tuple[int, int, int] | None = None,
+                  outline: tuple[int, int, int] | None = None) -> pygame.Surface:
+    """Render text as fat pixels onto its own transparent surface.
+
+    Blockiness comes from two choices: antialiasing off, so no grey edge pixels
+    survive, and ``pygame.transform.scale``, which is nearest neighbour. The
+    smaller the font and the larger the scale, the coarser the result.
+    """
+    def block(ink):
+        small = font.render(text, False, ink)
+        return pygame.transform.scale(
+            small, (small.get_width() * scale, small.get_height() * scale)
+        )
+
+    body = block(color)
+    step = max(2, scale)
+    pad = step * 2
+    out = pygame.Surface((body.get_width() + pad * 2, body.get_height() + pad * 2),
+                         pygame.SRCALPHA)
+    at = (pad, pad)
+
+    if outline is not None:
+        edge = block(outline)
+        for dx, dy in ((-step, 0), (step, 0), (0, -step), (0, step),
+                       (-step, -step), (step, -step), (-step, step), (step, step)):
+            out.blit(edge, (at[0] + dx, at[1] + dy))
+    if shadow is not None:
+        out.blit(block(shadow), (at[0] + scale, at[1] + scale))
+    out.blit(body, at)
+    return out
 
 
 def pixel_text(surface, text, font, color, center, scale: int = 3,
-               shadow: tuple[int, int, int] | None = None):
-    """Draw text as fat pixels. Returns the blitted rect."""
-    small = font.render(text, True, color)
-    big = pygame.transform.scale(
-        small, (small.get_width() * scale, small.get_height() * scale)
-    )
-    rect = big.get_rect(center=center)
-    if shadow is not None:
-        dark = font.render(text, True, shadow)
-        dark = pygame.transform.scale(dark, big.get_size())
-        surface.blit(dark, rect.move(scale, scale))
-    surface.blit(big, rect)
+               shadow: tuple[int, int, int] | None = None,
+               outline: tuple[int, int, int] | None = None):
+    """Draw fat-pixel text centred at ``center``. Returns the blitted rect."""
+    image = pixel_surface(text, font, color, scale, shadow, outline)
+    rect = image.get_rect(center=center)
+    surface.blit(image, rect)
     return rect
+
+
+def perspective(image: pygame.Surface, top: float = 0.5, bands: int = 20,
+                squash: float = 0.55) -> pygame.Surface:
+    """Tilt a surface away from the viewer, the opening-crawl way.
+
+    Sliced into horizontal bands, each scaled narrower and shorter towards the
+    top. It is not a real projection, but at this size nothing else reads as
+    different — and it stays nearest-neighbour, so the pixels survive.
+    """
+    w, h = image.get_size()
+    band_h = h / bands
+    heights = [band_h * (squash + (1 - squash) * (i + 1) / bands) for i in range(bands)]
+    out = pygame.Surface((w, round(sum(heights)) + bands), pygame.SRCALPHA)
+
+    y = 0.0
+    for i in range(bands):
+        strip = image.subsurface((0, round(i * band_h), w,
+                                  max(1, round(band_h) if i < bands - 1 else h - round(i * band_h))))
+        ratio = top + (1 - top) * (i + 1) / bands
+        target = (max(1, round(w * ratio)), max(1, round(heights[i])))
+        out.blit(pygame.transform.scale(strip, target), (round((w - target[0]) / 2), round(y)))
+        y += heights[i]
+    return out
 
 
 class Scanlines:
