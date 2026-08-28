@@ -13,6 +13,7 @@ import pygame
 
 from .detector import Detector
 from .logic import DRAW, LOSE, WIN, play
+from .particles import Particles
 
 VIEW_W = 640
 PANEL_H = 190
@@ -110,6 +111,7 @@ class Game:
         self.round_ = None
         self.shot = None          # frame frozen at the moment of the verdict
         self.shot_dets: list = []
+        self.particles = Particles()
 
     def _ui_font(self, size: int, bold: bool = False) -> pygame.font.Font:
         name = KOREAN_FONTS if self.hangul else MONO_FONTS
@@ -128,6 +130,7 @@ class Game:
         if not self.playing:
             self.round_ = None
             self.shot = None
+            self.particles.clear()
 
     def _advance(self, detections, frame, now: int) -> None:
         elapsed = now - self.since
@@ -141,6 +144,7 @@ class Game:
                 self.round_ = round_
                 self.shot = frame.copy()
                 self.shot_dets = detections
+                self._celebrate(round_, frame.shape)
                 self._enter(RESULT)
             elif elapsed >= SHOOT_MS:
                 self.round_ = None
@@ -149,7 +153,18 @@ class Game:
                 self._enter(RESULT)
 
         elif self.state == RESULT and elapsed >= RESULT_MS:
+            self.particles.clear()
             self._enter(COUNTDOWN if self.playing else IDLE)
+
+    def _celebrate(self, round_, shape) -> None:
+        """Fire particles over the winning hand. A draw has no winner to cheer."""
+        if round_.left_result == DRAW:
+            return
+        winner = round_.left if round_.left_result == WIN else round_.right
+        sx = self.view[0] / shape[1]
+        sy = self.view[1] / shape[0]
+        x1, y1, x2, y2 = winner.box
+        self.particles.burst(((x1 + x2) / 2 * sx, (y1 + y2) / 2 * sy), RESULT_COLORS[WIN])
 
     def run(self) -> None:
         running = True
@@ -182,6 +197,7 @@ class Game:
             # not keep the GPU busy.
             detections = self.detector.detect(frame) if self.state in (COUNTDOWN, SHOOT) else []
             self._advance(detections, frame, now)
+            self.particles.update(self.clock.get_time() / 1000.0)
 
             self.screen.fill(BG)
             if self.state == RESULT and self.shot is not None:
@@ -223,6 +239,11 @@ class Game:
             tag = pygame.Rect(rect.left, tag_top, caption.get_width() + 12, 24)
             pygame.draw.rect(self.screen, color, tag, border_radius=4)
             self.screen.blit(caption, (tag.left + 6, tag.top + 3))
+
+        # Clip to the video area so particles never spill onto the panel.
+        self.screen.set_clip(pygame.Rect(0, 0, *self.view))
+        self.particles.draw(self.screen)
+        self.screen.set_clip(None)
 
         if self.state == COUNTDOWN:
             self._draw_chant()

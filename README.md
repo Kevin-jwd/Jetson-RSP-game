@@ -24,6 +24,7 @@ Keys: `space` start/stop, `m` mirror, `q` quit. The chant falls back to
 | `tools/probe.py` | headless check of what the engine returns |
 | `rps/logic.py` | left/right assignment and win/lose/draw rules |
 | `rps/app.py` | round state machine (idle → countdown → shoot → result), buttons, rendering |
+| `rps/particles.py` | particle burst over the winning hand |
 | `models/rps_yolo11n.onnx` | trained detector, 320x320 — kept only as the source for building an engine |
 
 Class order is easy to get wrong and fails silently — rock read as paper looks like
