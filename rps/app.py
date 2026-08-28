@@ -1,4 +1,9 @@
-"""pygame front-end: webcam -> detection -> two-player verdict."""
+"""pygame front-end: webcam -> detection -> two-player verdict.
+
+A round is played, not polled: press 시작 and the game chants 가위-바위-보, reads
+both hands on the beat, freezes that frame with the verdict, then starts the next
+round. It keeps going until 종료.
+"""
 
 from __future__ import annotations
 
@@ -10,24 +15,49 @@ from .detector import Detector
 from .logic import DRAW, LOSE, WIN, play
 
 VIEW_W = 640
-PANEL_H = 170
+PANEL_H = 190
 
 BG = (18, 18, 22)
 PANEL = (28, 28, 34)
 DIVIDER = (55, 55, 64)
 TEXT = (235, 235, 240)
 MUTED = (130, 130, 145)
+ACCENT = (90, 160, 240)
+BUTTON = (44, 44, 54)
+BUTTON_HOVER = (60, 60, 74)
 
 RESULT_COLORS = {WIN: (90, 220, 140), LOSE: (240, 95, 95), DRAW: (225, 200, 90)}
 
+# Round timing, in milliseconds.
+BEAT_MS = 700          # one chant beat: 가위 / 바위 / 보!
+SHOOT_MS = 1500        # how long to keep looking for two hands after the beat
+RESULT_MS = 2500       # how long the frozen verdict stays up
 
-def _font(size: int, bold: bool = False) -> pygame.font.Font:
-    return pygame.font.SysFont("consolas,dejavusansmono,couriernew", size, bold=bold)
+IDLE, COUNTDOWN, SHOOT, RESULT = "idle", "countdown", "shoot", "result"
+
+# Fonts that can draw Hangul, in the order they are usually installed.
+KOREAN_FONTS = "notosanscjkkr,notosanskr,nanumgothic,nanumbarungothic,malgungothic,applegothic"
+MONO_FONTS = "consolas,dejavusansmono,couriernew"
 
 
 def _blit_centered(surface, text, font, color, center) -> None:
     img = font.render(text, True, color)
     surface.blit(img, img.get_rect(center=center))
+
+
+class Button:
+    def __init__(self, rect: pygame.Rect, label: str):
+        self.rect = rect
+        self.label = label
+
+    def draw(self, screen, font, mouse) -> None:
+        hover = self.rect.collidepoint(mouse)
+        pygame.draw.rect(screen, BUTTON_HOVER if hover else BUTTON, self.rect, border_radius=8)
+        pygame.draw.rect(screen, DIVIDER, self.rect, width=1, border_radius=8)
+        _blit_centered(screen, self.label, font, TEXT, self.rect.center)
+
+    def hit(self, pos) -> bool:
+        return self.rect.collidepoint(pos)
 
 
 class Game:
@@ -55,19 +85,90 @@ class Game:
         self.screen = pygame.display.set_mode((self.view[0], self.view[1] + PANEL_H))
         self.clock = pygame.time.Clock()
 
-        self.f_small = _font(18)
-        self.f_label = _font(34, bold=True)
-        self.f_result = _font(52, bold=True)
+        # Without a Hangul font the chant would render as empty boxes, so romanise.
+        self.hangul = pygame.font.match_font(KOREAN_FONTS) is not None
+        self.f_small = pygame.font.SysFont(MONO_FONTS, 18)
+        self.f_button = self._ui_font(22, bold=True)
+        self.f_label = self._ui_font(34, bold=True)
+        self.f_big = self._ui_font(64, bold=True)
+        self.f_result = self._ui_font(46, bold=True)
+
+        self.txt_start = "시작" if self.hangul else "START"
+        self.txt_stop = "정지" if self.hangul else "STOP"
+        self.txt_quit = "종료" if self.hangul else "QUIT"
+        self.chant = ["가위", "바위", "보!"] if self.hangul else ["GAWI", "BAWI", "BO!"]
+        self.txt_press = "시작을 누르세요" if self.hangul else "press START"
+        self.txt_nohands = "두 손이 안 보여요" if self.hangul else "no two hands"
+
+        by = self.view[1] + PANEL_H - 52
+        self.btn_play = Button(pygame.Rect(16, by, 130, 40), self.txt_start)
+        self.btn_quit = Button(pygame.Rect(self.view[0] - 146, by, 130, 40), self.txt_quit)
+
+        self.state = IDLE
+        self.since = 0
+        self.playing = False
+        self.round_ = None
+        self.shot = None          # frame frozen at the moment of the verdict
+        self.shot_dets: list = []
+
+    def _ui_font(self, size: int, bold: bool = False) -> pygame.font.Font:
+        name = KOREAN_FONTS if self.hangul else MONO_FONTS
+        return pygame.font.SysFont(name, size, bold=bold)
+
+    # --- round flow -------------------------------------------------------
+
+    def _enter(self, state: str) -> None:
+        self.state = state
+        self.since = pygame.time.get_ticks()
+
+    def _toggle_play(self) -> None:
+        self.playing = not self.playing
+        self.btn_play.label = self.txt_stop if self.playing else self.txt_start
+        self._enter(COUNTDOWN if self.playing else IDLE)
+        if not self.playing:
+            self.round_ = None
+            self.shot = None
+
+    def _advance(self, detections, frame, now: int) -> None:
+        elapsed = now - self.since
+
+        if self.state == COUNTDOWN and elapsed >= BEAT_MS * len(self.chant):
+            self._enter(SHOOT)
+
+        elif self.state == SHOOT:
+            round_ = play(detections)
+            if round_ is not None:
+                self.round_ = round_
+                self.shot = frame.copy()
+                self.shot_dets = detections
+                self._enter(RESULT)
+            elif elapsed >= SHOOT_MS:
+                self.round_ = None
+                self.shot = frame.copy()
+                self.shot_dets = detections
+                self._enter(RESULT)
+
+        elif self.state == RESULT and elapsed >= RESULT_MS:
+            self._enter(COUNTDOWN if self.playing else IDLE)
 
     def run(self) -> None:
         running = True
         while running:
+            now = pygame.time.get_ticks()
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if self.btn_quit.hit(event.pos):
+                        running = False
+                    elif self.btn_play.hit(event.pos):
+                        self._toggle_play()
                 elif event.type == pygame.KEYDOWN:
                     if event.key in (pygame.K_ESCAPE, pygame.K_q):
                         running = False
+                    elif event.key == pygame.K_SPACE:
+                        self._toggle_play()
                     elif event.key == pygame.K_m:
                         self.mirror = not self.mirror
 
@@ -77,17 +178,24 @@ class Game:
             if self.mirror:
                 frame = cv2.flip(frame, 1)
 
-            detections = self.detector.detect(frame)
-            round_ = play(detections)
+            # Only the beats that matter need inference: idling on a menu should
+            # not keep the GPU busy.
+            detections = self.detector.detect(frame) if self.state in (COUNTDOWN, SHOOT) else []
+            self._advance(detections, frame, now)
 
             self.screen.fill(BG)
-            self._draw_view(frame, detections, round_)
-            self._draw_panel(round_, len(detections))
+            if self.state == RESULT and self.shot is not None:
+                self._draw_view(self.shot, self.shot_dets, self.round_)
+            else:
+                self._draw_view(frame, detections, None)
+            self._draw_panel(now, len(detections))
             pygame.display.flip()
             self.clock.tick(60)
 
         self.cap.release()
         pygame.quit()
+
+    # --- drawing ----------------------------------------------------------
 
     def _draw_view(self, frame: np.ndarray, detections, round_) -> None:
         sx = self.view[0] / frame.shape[1]
@@ -116,35 +224,56 @@ class Game:
             pygame.draw.rect(self.screen, color, tag, border_radius=4)
             self.screen.blit(caption, (tag.left + 6, tag.top + 3))
 
-    def _draw_panel(self, round_, found: int) -> None:
+        if self.state == COUNTDOWN:
+            self._draw_chant()
+
+    def _draw_chant(self) -> None:
+        """The chant sits over the video so players watch the camera, not the panel."""
+        beat = min((pygame.time.get_ticks() - self.since) // BEAT_MS, len(self.chant) - 1)
+        word = self.chant[beat]
+
+        img = self.f_big.render(word, True, TEXT)
+        rect = img.get_rect(center=(self.view[0] // 2, self.view[1] // 2))
+        shade = pygame.Surface((rect.width + 48, rect.height + 24), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 150))
+        self.screen.blit(shade, shade.get_rect(center=rect.center))
+        self.screen.blit(img, rect)
+
+    def _draw_panel(self, now: int, found: int) -> None:
         top = self.view[1]
         pygame.draw.rect(self.screen, PANEL, (0, top, self.view[0], PANEL_H))
+        mid = self.view[0] // 2
 
-        if round_ is None:
-            message = "show two hands" if found == 0 else f"{found} hand detected"
-            _blit_centered(
-                self.screen, message, self.f_label, MUTED,
-                (self.view[0] // 2, top + PANEL_H // 2 - 12),
+        if self.state == RESULT and self.round_ is not None:
+            pygame.draw.line(
+                self.screen, DIVIDER, (mid, top + 14), (mid, top + PANEL_H - 66),
             )
-            self._draw_hint(top, found)
-            return
+            halves = (
+                (self.view[0] // 4, "LEFT", self.round_.left, self.round_.left_result),
+                (self.view[0] * 3 // 4, "RIGHT", self.round_.right, self.round_.right_result),
+            )
+            for cx, side, det, result in halves:
+                _blit_centered(self.screen, side, self.f_small, MUTED, (cx, top + 24))
+                _blit_centered(self.screen, det.label.upper(), self.f_label, TEXT, (cx, top + 56))
+                _blit_centered(
+                    self.screen, result, self.f_result, RESULT_COLORS[result], (cx, top + 100),
+                )
+        else:
+            if self.state == RESULT:
+                message, color = self.txt_nohands, RESULT_COLORS[LOSE]
+            elif self.state == SHOOT:
+                message, color = "...", ACCENT
+            elif self.state == COUNTDOWN:
+                message, color = self.chant[
+                    min((now - self.since) // BEAT_MS, len(self.chant) - 1)
+                ], ACCENT
+            else:
+                message, color = self.txt_press, MUTED
+            _blit_centered(self.screen, message, self.f_label, color, (mid, top + 62))
 
-        pygame.draw.line(
-            self.screen, DIVIDER,
-            (self.view[0] // 2, top + 18), (self.view[0] // 2, top + PANEL_H - 40),
-        )
+        mouse = pygame.mouse.get_pos()
+        self.btn_play.draw(self.screen, self.f_button, mouse)
+        self.btn_quit.draw(self.screen, self.f_button, mouse)
 
-        halves = (
-            (self.view[0] // 4, "LEFT", round_.left, round_.left_result),
-            (self.view[0] * 3 // 4, "RIGHT", round_.right, round_.right_result),
-        )
-        for cx, side, det, result in halves:
-            _blit_centered(self.screen, side, self.f_small, MUTED, (cx, top + 28))
-            _blit_centered(self.screen, det.label.upper(), self.f_label, TEXT, (cx, top + 64))
-            _blit_centered(self.screen, result, self.f_result, RESULT_COLORS[result], (cx, top + 112))
-
-        self._draw_hint(top, found)
-
-    def _draw_hint(self, top: int, found: int) -> None:
-        hint = f"{self.clock.get_fps():4.1f} fps   {found} det   [m] mirror   [q] quit"
-        self.screen.blit(self.f_small.render(hint, True, MUTED), (14, top + PANEL_H - 26))
+        hint = f"{self.clock.get_fps():4.1f} fps  {found} det  [space] start/stop  [m] mirror  [q] quit"
+        self.screen.blit(self.f_small.render(hint, True, MUTED), (16, top + PANEL_H - 84))
