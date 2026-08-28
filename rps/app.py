@@ -397,11 +397,11 @@ class Game:
             if not ok:
                 continue
 
-            # Detect on the camera's own image, then mirror for display. Mirroring
-            # first would hand the model a left hand every time a right hand is
-            # played, and public hand datasets lean right-handed, so that costs
-            # real accuracy. The mirror is only there so players see themselves
-            # the way they expect.
+            # Detect on the camera's own image, then mirror for display. The
+            # mirror exists so players see themselves the way they expect, and
+            # feeding it to the model as well flips every hand's chirality --
+            # measured on this engine, the flipped view scores lower. Whichever
+            # way the bias runs, the model should see what the camera saw.
             detections = self.detector.detect(frame) if self.state in (COUNTDOWN, SHOOT) else []
             if self.mirror:
                 detections = [_flip(d, frame.shape[1]) for d in detections]
