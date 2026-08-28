@@ -112,10 +112,12 @@ class Game:
         self.txt_quit = "종료" if self.hangul else "QUIT"
         self.chant = ["가위", "바위", "보!"] if self.hangul else ["GAWI", "BAWI", "BO!"]
         self.txt_nohands = "손이 안 보여요" if self.hangul else "no hands"
+        self.txt_solo = "1인용" if self.hangul else "1 PLAYER"
+        self.txt_duo = "2인용" if self.hangul else "2 PLAYERS"
 
         cx, by = self.view[0] // 2, self.view[1] + 100
-        self.btn_ai = Button(pygame.Rect(cx - 210, by, 190, 46), "vs AI")
-        self.btn_person = Button(pygame.Rect(cx + 20, by, 190, 46), "vs Person")
+        self.btn_ai = Button(pygame.Rect(cx - 210, by, 190, 46), self.txt_solo)
+        self.btn_person = Button(pygame.Rect(cx + 20, by, 190, 46), self.txt_duo)
         self.btn_retry = Button(pygame.Rect(cx - 210, by, 190, 46), self.txt_retry)
         self.btn_quit = Button(pygame.Rect(cx + 20, by, 190, 46), self.txt_quit)
         self.btn_stop = Button(pygame.Rect(self.view[0] - 146, by, 130, 46), self.txt_quit)
