@@ -1,4 +1,4 @@
 numpy
 opencv-python
-ultralytics
 pygame
+# tensorrt comes from JetPack; install cuda-python (or pycuda) for device memory
