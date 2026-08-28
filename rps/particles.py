@@ -23,6 +23,12 @@ LIFE = (0.6, 1.2)      # seconds
 SPEED = (90.0, 340.0)  # px/s
 RADIUS = (2, 5)
 
+# Vivid hues that stay readable against the camera image.
+RAINBOW = (
+    (255, 90, 90), (255, 165, 60), (255, 225, 70), (110, 230, 130),
+    (90, 200, 255), (120, 130, 255), (220, 120, 255),
+)
+
 _circles: dict[tuple[tuple[int, int, int], int], pygame.Surface] = {}
 
 
@@ -74,9 +80,11 @@ class Particles:
     def __init__(self):
         self.items: list[Particle] = []
 
-    def burst(self, center: tuple[float, float], color: tuple[int, int, int], count: int = 80) -> None:
+    def burst(self, center, color, count: int = 110) -> None:
+        """``color`` is one RGB triple, or a palette to pick from per particle."""
+        palette = [color] if isinstance(color[0], int) else list(color)
         x, y = center
-        self.items.extend(Particle(x, y, color) for _ in range(count))
+        self.items.extend(Particle(x, y, random.choice(palette)) for _ in range(count))
 
     def update(self, dt: float) -> None:
         self.items = [p for p in self.items if p.update(dt)]

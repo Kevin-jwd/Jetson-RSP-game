@@ -13,7 +13,7 @@ import pygame
 
 from .detector import Detector
 from .logic import DRAW, LOSE, WIN, play
-from .particles import Particles
+from .particles import RAINBOW, Particles
 
 VIEW_W = 640
 PANEL_H = 190
@@ -164,7 +164,7 @@ class Game:
         sx = self.view[0] / shape[1]
         sy = self.view[1] / shape[0]
         x1, y1, x2, y2 = winner.box
-        self.particles.burst(((x1 + x2) / 2 * sx, (y1 + y2) / 2 * sy), RESULT_COLORS[WIN])
+        self.particles.burst(((x1 + x2) / 2 * sx, (y1 + y2) / 2 * sy), RAINBOW)
 
     def run(self) -> None:
         running = True
