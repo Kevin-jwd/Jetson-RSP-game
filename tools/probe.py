@@ -9,6 +9,7 @@ is simply set too high.
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 import cv2
@@ -25,6 +26,7 @@ def main() -> None:
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--conf", type=float, default=0.05)
     parser.add_argument("--frames", type=int, default=20)
+    parser.add_argument("--delay", type=float, default=3.0, help="seconds to get a hand in view")
     args = parser.parse_args()
 
     det = Detector(args.model, conf_thres=args.conf)
@@ -38,6 +40,23 @@ def main() -> None:
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         raise SystemExit(f"could not open camera {args.camera}")
+
+    # Does the engine react to its input at all? Two very different frames must
+    # not produce the same score; if they do, the blob never reaches the engine.
+    black = np.zeros((240, 320, 3), np.uint8)
+    noise = np.random.randint(0, 256, (240, 320, 3), dtype=np.uint8)
+    det.detect(black)
+    black_score = float(det.out[0].T[:, 4:].max())
+    det.detect(noise)
+    noise_score = float(det.out[0].T[:, 4:].max())
+    print(f"sanity: black={black_score:.4f} noise={noise_score:.4f}"
+          f"{'  <-- input is being ignored' if black_score == noise_score else ''}")
+
+    if args.delay:
+        print(f"show your hands... starting in {args.delay:.0f}s", flush=True)
+        for _ in range(int(args.delay * 30)):  # keep draining so frames stay fresh
+            cap.read()
+        time.sleep(0.1)
 
     for i in range(args.frames):
         ok, frame = cap.read()
