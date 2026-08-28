@@ -73,6 +73,12 @@ KOREAN_FONTS = "notosanscjkkr,notosanskr,nanumgothic,nanumbarungothic,malgungoth
 MONO_FONTS = "consolas,dejavusansmono,couriernew"
 
 
+def _flip(det, width: int):
+    """Move a detection to where it appears in the mirrored image."""
+    x1, y1, x2, y2 = det.box
+    return replace(det, box=(width - x2, y1, width - x1, y2))
+
+
 def _blit_centered(surface, text, font, color, center) -> None:
     img = font.render(text, True, color)
     surface.blit(img, img.get_rect(center=center))
@@ -390,12 +396,17 @@ class Game:
             ok, frame = self.cap.read()
             if not ok:
                 continue
+
+            # Detect on the camera's own image, then mirror for display. Mirroring
+            # first would hand the model a left hand every time a right hand is
+            # played, and public hand datasets lean right-handed, so that costs
+            # real accuracy. The mirror is only there so players see themselves
+            # the way they expect.
+            detections = self.detector.detect(frame) if self.state in (COUNTDOWN, SHOOT) else []
             if self.mirror:
+                detections = [_flip(d, frame.shape[1]) for d in detections]
                 frame = cv2.flip(frame, 1)
 
-            # Only the beats that matter need inference: a title screen should
-            # not keep the GPU busy.
-            detections = self.detector.detect(frame) if self.state in (COUNTDOWN, SHOOT) else []
             self._advance(detections, frame, now)
             self.particles.update(self.clock.get_time() / 1000.0)
 
