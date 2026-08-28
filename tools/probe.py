@@ -27,9 +27,11 @@ def main() -> None:
     parser.add_argument("--conf", type=float, default=0.05)
     parser.add_argument("--frames", type=int, default=20)
     parser.add_argument("--delay", type=float, default=3.0, help="seconds to get a hand in view")
+    parser.add_argument("--classes", help="class order of the engine, comma separated")
     args = parser.parse_args()
 
-    det = Detector(args.model, conf_thres=args.conf)
+    det = Detector(args.model, conf_thres=args.conf,
+                   class_names=args.classes.split(",") if args.classes else None)
     print(f"input  {det.in_name}: {tuple(det.context.get_tensor_shape(det.in_name))} {det.in_dtype}")
     print(f"output {det.out_name}: {det.out.shape} {det.out_dtype}")
     print(f"names: {det.names}")

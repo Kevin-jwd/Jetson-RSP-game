@@ -11,9 +11,14 @@ def main() -> None:
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--conf", type=float, default=0.5)
     parser.add_argument("--no-mirror", action="store_true")
+    parser.add_argument(
+        "--classes",
+        help="class order of the engine, e.g. scissors,rock,paper for an older model",
+    )
     args = parser.parse_args()
 
-    Game(args.model, args.camera, args.conf, mirror=not args.no_mirror).run()
+    classes = args.classes.split(",") if args.classes else None
+    Game(args.model, args.camera, args.conf, mirror=not args.no_mirror, class_names=classes).run()
 
 
 if __name__ == "__main__":

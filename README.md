@@ -24,9 +24,11 @@ Options: `--model`, `--camera`, `--conf`, `--no-mirror`. Keys: `m` mirror, `q` q
 | `rps/app.py` | pygame loop and rendering |
 | `models/rps_yolo11n.onnx` | trained detector, 320x320 — kept only as the source for building an engine |
 
-Class names come from the engine's own JSON header when it has one; otherwise the
-`CLASS_NAMES` fallback applies, `{0: scissors, 1: rock, 2: paper}` — an order that
-is easy to get wrong.
+Class order is easy to get wrong and fails silently — rock read as paper looks like
+a badly trained model. `--classes` wins, then the engine's own JSON header if it
+has one, then the `CLASS_NAMES` fallback in `rps/detector.py`, which follows the
+Roboflow dataset: `paper, rock, scissors`. An engine built from the older class
+dataset needs `--classes scissors,rock,paper`.
 
 ## Jetson
 

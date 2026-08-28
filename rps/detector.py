@@ -16,8 +16,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-# Fallback for engines that carry no class list of their own.
-CLASS_NAMES = {0: "scissors", 1: "rock", 2: "paper"}
+# Fallback for engines that carry no class list of their own. This is the order
+# of the Roboflow rock-paper-scissors dataset the current model is trained on;
+# an engine built from an older model needs --classes to say so.
+CLASS_NAMES = {0: "paper", 1: "rock", 2: "scissors"}
 
 
 @dataclass(frozen=True)
@@ -92,7 +94,8 @@ class Detector:
     it has to be built on the Jetson itself.
     """
 
-    def __init__(self, model_path: str, conf_thres: float = 0.5, iou_thres: float = 0.45):
+    def __init__(self, model_path: str, conf_thres: float = 0.5, iou_thres: float = 0.45,
+                 class_names: list[str] | None = None):
         import tensorrt as trt
 
         from .cuda import CudaMemory
@@ -132,9 +135,10 @@ class Detector:
         self.in_dtype = np.dtype(trt.nptype(self.engine.get_tensor_dtype(self.in_name)))
         self.out_dtype = np.dtype(trt.nptype(self.engine.get_tensor_dtype(self.out_name)))
 
-        names = meta.get("names")
-        if names:
-            names = {int(k): v for k, v in names.items()}
+        if class_names:
+            names = dict(enumerate(class_names))
+        elif meta.get("names"):
+            names = {int(k): v for k, v in meta["names"].items()}
         else:
             names = CLASS_NAMES
         self.names = names

@@ -31,8 +31,9 @@ def _blit_centered(surface, text, font, color, center) -> None:
 
 
 class Game:
-    def __init__(self, model_path: str, camera: int = 0, conf: float = 0.5, mirror: bool = True):
-        self.detector = Detector(model_path, conf_thres=conf)
+    def __init__(self, model_path: str, camera: int = 0, conf: float = 0.5, mirror: bool = True,
+                 class_names: list[str] | None = None):
+        self.detector = Detector(model_path, conf_thres=conf, class_names=class_names)
         self.mirror = mirror
 
         self.cap = cv2.VideoCapture(camera)
