@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import cv2
@@ -95,13 +95,14 @@ class Detector:
     """
 
     def __init__(self, model_path: str, conf_thres: float = 0.5, iou_thres: float = 0.45,
-                 class_names: list[str] | None = None):
+                 class_names: list[str] | None = None, flip_tta: bool = True):
         import tensorrt as trt
 
         from .cuda import CudaMemory
 
         self.conf_thres = conf_thres
         self.iou_thres = iou_thres
+        self.flip_tta = flip_tta
 
         # Create the CUDA context *before* the engine. pycuda.autoinit makes its
         # own context current, and an engine deserialized under a different one
@@ -165,6 +166,31 @@ class Detector:
         return self.out
 
     def detect(self, frame: np.ndarray) -> list[Detection]:
+        """Detect hands, optionally looking at the mirrored frame as well.
+
+        A model trained on a hand dataset is rarely even-handed: the same gesture
+        scores differently as a left or a right hand. Running both orientations
+        and keeping whichever scored higher removes the question of which way to
+        point the camera, at the cost of a second inference.
+        """
+        found = self._detect_one(frame)
+        if not self.flip_tta:
+            return found
+
+        width = frame.shape[1]
+        for det in self._detect_one(cv2.flip(frame, 1)):
+            x1, y1, x2, y2 = det.box
+            found.append(replace(det, box=(width - x2, y1, width - x1, y2)))
+        if len(found) < 2:
+            return found
+
+        # The same hand now appears once per orientation; class-agnostic NMS
+        # keeps the more confident reading of each.
+        boxes = np.array([d.box for d in found], dtype=np.float64)
+        scores = np.array([d.conf for d in found])
+        return [found[i] for i in _nms(boxes, scores, self.iou_thres)]
+
+    def _detect_one(self, frame: np.ndarray) -> list[Detection]:
         canvas, r, pad_x, pad_y = _letterbox(frame, self.size)
         blob = np.ascontiguousarray(
             canvas[:, :, ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0

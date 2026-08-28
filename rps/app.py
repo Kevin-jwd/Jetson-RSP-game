@@ -103,8 +103,9 @@ class Button:
 
 class Game:
     def __init__(self, model_path: str, camera: int = 0, conf: float = 0.5, mirror: bool = True,
-                 class_names: list[str] | None = None):
-        self.detector = Detector(model_path, conf_thres=conf, class_names=class_names)
+                 class_names: list[str] | None = None, flip_tta: bool = True):
+        self.detector = Detector(model_path, conf_thres=conf, class_names=class_names,
+                                 flip_tta=flip_tta)
         self.mirror = mirror
 
         self.cap = cv2.VideoCapture(camera)

@@ -12,13 +12,18 @@ def main() -> None:
     parser.add_argument("--conf", type=float, default=0.5)
     parser.add_argument("--no-mirror", action="store_true")
     parser.add_argument(
+        "--no-flip-tta", action="store_true",
+        help="detect only on the camera image, instead of both orientations",
+    )
+    parser.add_argument(
         "--classes",
         help="class order of the engine, e.g. scissors,rock,paper for an older model",
     )
     args = parser.parse_args()
 
     classes = args.classes.split(",") if args.classes else None
-    Game(args.model, args.camera, args.conf, mirror=not args.no_mirror, class_names=classes).run()
+    Game(args.model, args.camera, args.conf, mirror=not args.no_mirror,
+         class_names=classes, flip_tta=not args.no_flip_tta).run()
 
 
 if __name__ == "__main__":

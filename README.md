@@ -20,7 +20,7 @@ pip install -r requirements.txt
 python main.py --model models/rps_yolo11s.engine
 ```
 
-Options: `--model`, `--camera`, `--conf`, `--classes`, `--no-mirror`.
+Options: `--model`, `--camera`, `--conf`, `--classes`, `--no-mirror`, `--no-flip-tta`.
 Keys: `c` insert coin, `r` retry, `m` mirror, `q` quit (the only way out). Labels fall back to
 English when no Hangul font is installed.
 
@@ -50,6 +50,16 @@ and a fist opening into paper passes through something the model reads as
 scissors. So the game collects labels over `VOTE_MS` (0.7s), one vote per frame
 per hand, and takes the majority; ties go to the higher summed confidence. Hands
 are matched to players by box position, not by label.
+
+## Handedness
+
+A model trained on a hand dataset is rarely even-handed: the same gesture scores
+differently as a left or a right hand, so whichever way the camera image is
+turned, one player gets the worse half. Each frame is therefore run twice, once
+as the camera saw it and once mirrored, and the more confident reading of each
+hand is kept. `--no-flip-tta` turns that off and halves the inference cost.
+
+The on-screen mirror is display only — it never reaches the model.
 
 ## Class order
 
