@@ -3,7 +3,8 @@
 Rock-paper-scissors over a webcam. The title screen offers `vs AI` (one hand
 against a random move, drawn over the left of the video) and `vs Person` (two
 hands in the frame). The game chants 가위-바위-보, reads the hands on the beat,
-freezes that frame with the verdict, and stops there: 재시도 or 종료.
+freezes that frame with the verdict, and stops there: 재시도 plays again, 종료
+returns to the title. Only `q` closes the program.
 
 ## Run
 
@@ -13,7 +14,7 @@ python main.py
 ```
 
 Options: `--model`, `--camera`, `--conf`, `--classes`, `--no-mirror`.
-Keys: `r` retry, `m` mirror, `q` quit. Labels fall back to English when no
+Keys: `r` retry, `m` mirror, `q` quit (the only way out). Labels fall back to English when no
 Hangul font is installed.
 
 ## Layout

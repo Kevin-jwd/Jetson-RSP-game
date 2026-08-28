@@ -175,6 +175,11 @@ class Game:
         self.particles.clear()
         self._enter(COUNTDOWN)
 
+    def _to_menu(self) -> None:
+        """Leaving a round returns to the title; only q closes the program."""
+        self.particles.clear()
+        self._enter(MENU)
+
     def _buttons(self) -> list[Button]:
         if self.state == MENU:
             return [self.btn_ai, self.btn_person]
@@ -254,10 +259,9 @@ class Game:
                         if self.btn_retry.hit(event.pos):
                             self._start(self.mode)
                         elif self.btn_quit.hit(event.pos):
-                            running = False
+                            self._to_menu()
                     elif self.btn_stop.hit(event.pos):
-                        self.particles.clear()
-                        self._enter(MENU)
+                        self._to_menu()
                 elif event.type == pygame.KEYDOWN:
                     if event.key in (pygame.K_ESCAPE, pygame.K_q):
                         running = False
@@ -411,7 +415,7 @@ class Game:
         for button in self._buttons():
             button.draw(self.screen, self.f_button, mouse)
 
-        hint = f"{self.clock.get_fps():4.1f} fps  {found} det  [m] mirror  [q] quit"
+        hint = f"{self.clock.get_fps():4.1f} fps  {found} det  [r] retry  [m] mirror  [q] quit"
         self.screen.blit(self.f_small.render(hint, True, MUTED), (16, top + PANEL_H - 26))
 
     def _result_sides(self):
