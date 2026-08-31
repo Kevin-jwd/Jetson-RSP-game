@@ -1,4 +1,10 @@
-numpy
-opencv-python
-pygame
-# tensorrt comes from JetPack; install cuda-python (or pycuda) for device memory
+# Core Frameworks & GUI
+pygame>=2.5.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# TensorRT & CUDA Dependencies
+# Note: TensorRT and CUDA bindings (cuda-python/pycuda) are typically pre-installed 
+# with JetPack on NVIDIA Jetson platforms.
+tensorrt>=8.6.0
+cuda-python>=12.0.0; sys_platform == 'linux'
