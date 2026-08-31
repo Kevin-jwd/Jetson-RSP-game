@@ -98,7 +98,7 @@ class Detector:
                  class_names: list[str] | None = None, flip_tta: bool = True):
         import tensorrt as trt
 
-        from .cuda import CudaMemory
+        from .trt_module import CudaMemory
 
         self.conf_thres = conf_thres
         self.iou_thres = iou_thres
